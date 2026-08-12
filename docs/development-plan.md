@@ -1,12 +1,16 @@
 # Development plan
 
-These are discussion checkpoints, not completed features.
+Completed checkpoints are marked below.
 
-1. Agree on the package layout and dependencies.
-2. Load and validate environment configuration.
-3. Implement the restricted SSH client and command allowlist.
-4. Implement and test the three read-only tools.
-5. Integrate Ollama tool calling.
-6. Build the agent loop and structured tool-call logs.
-7. Add a small interactive command-line interface.
-8. Run a real end-to-end test against the home server.
+- [x] Agree on the package layout and dependencies.
+- [x] Load and validate environment configuration.
+- [x] Implement the restricted SSH client and command allowlist.
+- [ ] Implement and test the three read-only tools.
+- [ ] Integrate Ollama tool calling.
+- [ ] Build the agent loop and structured tool-call logs.
+- [ ] Add a small interactive command-line interface.
+- [ ] Run a real end-to-end agent test against the home server.
+
+The restricted SSH path has also passed a live smoke test using the approved
+`HOSTNAME` command. This verifies SSH command execution, but is not yet the full
+agent end-to-end test in the final checkpoint.
