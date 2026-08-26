@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import monotonic, sleep
 from typing import TYPE_CHECKING
 
 import paramiko
@@ -26,10 +27,13 @@ class SSHClient:
 
     settings: Settings
     connection_timeout: float = 10.0
+    command_timeout: float = 10.0
 
     def __post_init__(self) -> None:
         if self.connection_timeout <= 0:
             raise ValueError("Connection timeout must be greater than zero")
+        if self.command_timeout <= 0:
+            raise ValueError("Command timeout must be greater than zero")
 
     @staticmethod
     def _create_paramiko_client() -> paramiko.SSHClient:
@@ -85,12 +89,35 @@ class SSHClient:
                 look_for_keys=False,
                 allow_agent=False,
             )
-            _, stdout, stderr = client.exec_command(
-                command, timeout=self.connection_timeout
-            )
-            stdout_text = stdout.read().decode("utf-8", errors="replace")
-            stderr_text = stderr.read().decode("utf-8", errors="replace")
-            exit_code = stdout.channel.recv_exit_status()
-            return CommandResult(stdout_text, stderr_text, exit_code)
+            _, stdout, _ = client.exec_command(command, timeout=self.command_timeout)
+            return self._collect_result(stdout.channel)
         finally:
             client.close()
+
+    def _collect_result(self, channel: paramiko.Channel) -> CommandResult:
+        """Drain a command channel within a total wall-clock deadline."""
+
+        deadline = monotonic() + self.command_timeout
+        stdout = bytearray()
+        stderr = bytearray()
+
+        while True:
+            while channel.recv_ready():
+                stdout.extend(channel.recv(65536))
+            while channel.recv_stderr_ready():
+                stderr.extend(channel.recv_stderr(65536))
+
+            if channel.exit_status_ready():
+                return CommandResult(
+                    stdout.decode("utf-8", errors="replace"),
+                    stderr.decode("utf-8", errors="replace"),
+                    channel.recv_exit_status(),
+                )
+
+            if monotonic() >= deadline:
+                channel.close()
+                raise TimeoutError(
+                    f"Approved command exceeded {self.command_timeout:g} seconds"
+                )
+
+            sleep(0.01)

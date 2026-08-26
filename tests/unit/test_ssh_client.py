@@ -98,6 +98,18 @@ def test_connection_timeout_must_be_positive() -> None:
         SSHClient(settings=settings, connection_timeout=0)
 
 
+def test_command_timeout_must_be_positive() -> None:
+    settings = Settings(
+        server_host="homeserver",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        _env_file=None,
+    )
+
+    with pytest.raises(ValueError, match="Command timeout"):
+        SSHClient(settings=settings, command_timeout=0)
+
+
 def test_ssh_client_resolves_an_approved_command() -> None:
     client = SSHClient(
         settings=Settings(
@@ -134,20 +146,22 @@ def test_run_approved_command_executes_exact_fixed_command() -> None:
         server_ssh_key=Path("test_key"),
         _env_file=None,
     )
-    ssh = SSHClient(settings=settings, connection_timeout=5)
-    stdout = MagicMock()
-    stdout.read.return_value = b"server-01\n"
-    stdout.channel.recv_exit_status.return_value = 0
-    stderr = MagicMock()
-    stderr.read.return_value = b""
+    ssh = SSHClient(settings=settings, connection_timeout=5, command_timeout=7)
+    channel = MagicMock()
+    channel.recv_ready.side_effect = [True, False]
+    channel.recv.return_value = b"server-01\n"
+    channel.recv_stderr_ready.return_value = False
+    channel.exit_status_ready.return_value = True
+    channel.recv_exit_status.return_value = 0
+    stdout = MagicMock(channel=channel)
 
     with patch.object(SSHClient, "_create_paramiko_client") as create_client:
         client = create_client.return_value
-        client.exec_command.return_value = (MagicMock(), stdout, stderr)
+        client.exec_command.return_value = (MagicMock(), stdout, MagicMock())
 
         result = ssh.run_approved_command(CommandID.HOSTNAME)
 
-    client.exec_command.assert_called_once_with("hostname", timeout=5)
+    client.exec_command.assert_called_once_with("hostname", timeout=7)
     client.close.assert_called_once_with()
     assert result == CommandResult(
         stdout="server-01\n",
@@ -224,17 +238,20 @@ def test_run_returns_nonzero_exit_status_and_stderr() -> None:
             _env_file=None,
         )
     )
-    stdout = MagicMock()
-    stdout.read.return_value = b"partial output\n"
-    stdout.channel.recv_exit_status.return_value = 1
-    stderr = MagicMock()
-    stderr.read.return_value = b"command failed\n"
+    channel = MagicMock()
+    channel.recv_ready.side_effect = [True, False]
+    channel.recv.return_value = b"partial output\n"
+    channel.recv_stderr_ready.side_effect = [True, False]
+    channel.recv_stderr.return_value = b"command failed\n"
+    channel.exit_status_ready.return_value = True
+    channel.recv_exit_status.return_value = 1
+    stdout = MagicMock(channel=channel)
 
     with patch.object(SSHClient, "_create_paramiko_client") as create_client:
         create_client.return_value.exec_command.return_value = (
             MagicMock(),
             stdout,
-            stderr,
+            MagicMock(),
         )
         result = ssh.run_approved_command(CommandID.DISK_USAGE)
 
@@ -243,3 +260,30 @@ def test_run_returns_nonzero_exit_status_and_stderr() -> None:
         stderr="command failed\n",
         exit_code=1,
     )
+
+
+def test_run_times_out_when_command_never_finishes() -> None:
+    ssh = SSHClient(
+        settings=Settings(
+            server_host="homeserver",
+            server_username="localops",
+            server_ssh_key=Path("test_key"),
+            _env_file=None,
+        ),
+        command_timeout=0.01,
+    )
+    channel = MagicMock()
+    channel.recv_ready.return_value = False
+    channel.recv_stderr_ready.return_value = False
+    channel.exit_status_ready.return_value = False
+    stdout = MagicMock(channel=channel)
+
+    with patch.object(SSHClient, "_create_paramiko_client") as create_client:
+        client = create_client.return_value
+        client.exec_command.return_value = (MagicMock(), stdout, MagicMock())
+
+        with pytest.raises(TimeoutError, match="exceeded"):
+            ssh.run_approved_command(CommandID.UPTIME)
+
+    channel.close.assert_called_once_with()
+    client.close.assert_called_once_with()
