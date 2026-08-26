@@ -19,8 +19,10 @@ User -> Agent -> Ollama -> named tool -> registry
      -> command result -> Ollama -> final answer
 ```
 
-The command registry and restricted SSH portion of this flow are implemented.
-The tool, Ollama, and agent portions remain planned.
+The command registry, restricted SSH client, and predefined tool portions of
+this flow are implemented. Each tool stops on the first non-zero command exit
+and raises a diagnostic error retaining the command ID, stdout, stderr, and exit
+code. The Ollama and agent portions remain planned.
 
 ## Version 0.1 non-goals
 

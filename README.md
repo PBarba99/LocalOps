@@ -4,10 +4,10 @@ LocalOps is a planned local AI assistant for inspecting a Linux home server.
 The application will run on Windows, use a small Qwen model through Ollama, and
 retrieve live server information over SSH through predefined read-only tools.
 
-The configuration and restricted SSH boundary are implemented. LocalOps can
-connect with key-based authentication and execute commands selected from a
-fixed, immutable allowlist. The read-only tools, Ollama integration, agent loop,
-and command-line interface are not implemented yet.
+The configuration, restricted SSH boundary, and three read-only inspection
+tools are implemented. LocalOps can connect with key-based authentication and
+execute commands selected from a fixed, immutable allowlist. Ollama integration,
+the agent loop, and the command-line interface are not implemented yet.
 
 ## Version 0.1 goal
 
@@ -59,8 +59,12 @@ accepted automatically.
 - Six reviewed read-only commands are represented by `CommandID` and stored in
   an immutable allowlist.
 - The SSH client rejects raw command text, uses the configured private key, and
-  returns stdout, stderr, and the remote exit code.
+  returns stdout, stderr, and the remote exit code. Connection and command waits
+  have bounded timeouts.
+- System, memory, and disk tools execute only their assigned `CommandID` values.
+  They fail immediately on a non-zero exit while preserving stdout and stderr
+  for diagnosis.
 - Unit tests cover command injection, connection failures, execution failures,
-  non-zero exits, and connection cleanup.
-- A live `HOSTNAME` command has been verified successfully against the target
+  command timeouts, non-zero exits, tool failure behavior, and cleanup.
+- All three inspection tools have passed live smoke tests against the target
   server.
