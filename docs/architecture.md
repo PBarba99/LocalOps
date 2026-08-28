@@ -19,10 +19,17 @@ User -> Agent -> Ollama -> named tool -> registry
      -> command result -> Ollama -> final answer
 ```
 
-The command registry, restricted SSH client, and predefined tool portions of
-this flow are implemented. Each tool stops on the first non-zero command exit
-and raises a diagnostic error retaining the command ID, stdout, stderr, and exit
-code. The Ollama and agent portions remain planned.
+This flow is implemented through the final model answer. Ollama sees only three
+zero-argument tool schemas. LocalOps requires exactly one request, validates its
+exact name and empty arguments, and permits one corrective model retry after an
+invalid request. A second invalid request fails closed; SSH, timeout, and remote
+command failures are not retried through the model.
+
+Each tool stops on the first non-zero command exit and raises a diagnostic error
+retaining the command ID, stdout, stderr, and exit code. Structured JSON events
+record tool names, attempts, validation decisions, and execution outcomes. They
+exclude user questions, tool output, SSH configuration, and exception messages
+from operational failures.
 
 ## Version 0.1 non-goals
 

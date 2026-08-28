@@ -1,12 +1,18 @@
 """Explicit registries for model-visible tools and approved commands."""
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+from dataclasses import dataclass
 from enum import Enum, unique
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-Tool = Callable[..., str]
+if TYPE_CHECKING:
+    from ..ssh_client import SSHClient
+
+
+class InvalidToolRequest(ValueError):
+    """The model requested a tool outside the fixed invocation contract."""
 
 
 @unique
@@ -46,15 +52,63 @@ def lookup_command(command_id: CommandID) -> str:
         raise ValueError(f"Unknown command ID: {command_id!r}") from exc
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolRegistry:
-    _tools: dict[str, Tool] = field(default_factory=dict)
+    """Fixed model-visible tools and their strict invocation boundary."""
 
-    def register(self, name: str, tool: Tool) -> None:
-        self._tools[name] = tool
+    ssh: SSHClient | None = None
 
     def definitions(self) -> list[dict[str, Any]]:
-        raise NotImplementedError("Tool definitions are not implemented")
+        """Return the fixed zero-argument tools visible to the model."""
+
+        descriptions = (
+            (
+                "get_system_info",
+                "Get the server hostname, operating system, kernel, and uptime.",
+            ),
+            (
+                "get_memory_usage",
+                "Get the server's current memory and swap usage.",
+            ),
+            (
+                "get_disk_usage",
+                "Get current disk usage for the server's mounted filesystems.",
+            ),
+        )
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+            for name, description in descriptions
+        ]
 
     def invoke(self, name: str, arguments: dict[str, Any]) -> str:
-        raise NotImplementedError(f"Invocation for {name!r} is not implemented")
+        """Invoke one fixed zero-argument tool after strict validation."""
+
+        from .disk import get_disk_usage
+        from .memory import get_memory_usage
+        from .system import get_system_info
+
+        tools = {
+            "get_system_info": get_system_info,
+            "get_memory_usage": get_memory_usage,
+            "get_disk_usage": get_disk_usage,
+        }
+        if not isinstance(name, str) or name not in tools:
+            raise InvalidToolRequest(f"Unknown tool: {name!r}")
+        if not isinstance(arguments, dict) or arguments:
+            raise InvalidToolRequest(f"Tool {name!r} accepts no arguments")
+        if self.ssh is None:
+            raise RuntimeError("Tool registry has no SSH client")
+
+        return tools[name](self.ssh)
