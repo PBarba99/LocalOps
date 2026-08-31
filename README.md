@@ -145,3 +145,7 @@ configuration, and private-key paths.
 - Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,
   response latency, and refusal of write operations. Qwen 3 4B remains available
   as a configuration-only fallback.
+
+## License
+
+LocalOps is available under the [MIT License](LICENSE).
