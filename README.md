@@ -1,13 +1,13 @@
 # LocalOps
 
-LocalOps is a planned local AI assistant for inspecting a Linux home server.
-The application will run on Windows, use a small Qwen model through Ollama, and
-retrieve live server information over SSH through predefined read-only tools.
+LocalOps is a local AI assistant for inspecting a Linux home server. The
+application runs on Windows, uses Llama 3.1 8B through Ollama, and retrieves
+live server information over SSH through predefined read-only tools.
 
 The configuration, restricted SSH boundary, three read-only inspection tools,
 Ollama tool calling, and agent loop are implemented. LocalOps can answer a
 natural-language question using live server data selected through a fixed,
-immutable allowlist. The command-line interface is not implemented yet.
+immutable allowlist. An interactive command-line interface is available.
 
 ## Version 0.1 goal
 
@@ -53,6 +53,67 @@ private SSH keys must never be committed. The target server must already be in
 the user's SSH `known_hosts`; unknown host keys are rejected rather than
 accepted automatically.
 
+Ollama must be running and the configured model must already be installed. The
+VPN or local network route required to reach the server must also be active.
+
+From PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+### Model selection
+
+The recommended model is `llama3.1:8b`. Install it before starting LocalOps:
+
+```powershell
+ollama pull llama3.1:8b
+```
+
+The model is selected with `OLLAMA_MODEL` in `.env`, so changing models does not
+alter the application or its command restrictions. `qwen3:4b` remains a tested
+fallback and control model. To use it, keep that model installed and set:
+
+```dotenv
+OLLAMA_MODEL=qwen3:4b
+```
+
+Llama 3.1 8B was selected after isolated and live CLI tests showed valid tool
+selection, concise answers, no visible reasoning output, and substantially
+lower response latency. The system prompt explicitly requires exact reported
+units and refusal of all server modifications.
+
+## Interactive CLI
+
+Start LocalOps from the project directory:
+
+```powershell
+.\.venv\Scripts\localops.exe
+```
+
+Alternatively:
+
+```powershell
+.\.venv\Scripts\python.exe -m localops.app
+```
+
+Ask natural-language questions such as:
+
+```text
+You: How much storage is left on the server?
+You: How much memory is currently available?
+You: What operating system is the server running?
+```
+
+Enter `exit` or `quit` to stop. Expected connection, model, command, and tool
+validation failures are displayed concisely and return to the prompt. `Ctrl+C`
+and end-of-input exit cleanly.
+
+Structured tool events are written to `.localops/localops.log` at the configured
+`LOG_LEVEL`. Logs rotate locally and exclude user questions, server output, SSH
+configuration, and private-key paths.
+
 ## Current status
 
 - Environment configuration is loaded, validated, and immutable.
@@ -74,5 +135,13 @@ accepted automatically.
 - The agent returns tool output to Ollama for a grounded final answer. Structured
   JSON logs record tool selection and outcomes without questions, command
   output, SSH settings, or private-key paths.
+- The model instructions require quantities and units to be copied exactly from
+  tool output. Requests to modify the server must be refused, including repeated
+  requests, and unavailable commands or tool calls must not be suggested.
 - The full question-to-answer flow has been verified live with system, memory,
   and disk questions.
+- The interactive CLI constructs the complete application, accepts repeated
+  questions, reports expected failures without a traceback, and exits cleanly.
+- Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,
+  response latency, and refusal of write operations. Qwen 3 4B remains available
+  as a configuration-only fallback.

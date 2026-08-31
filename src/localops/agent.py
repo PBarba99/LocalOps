@@ -18,6 +18,29 @@ def _log_tool_event(event: str, **fields: Any) -> None:
     logger.info(json.dumps({"event": event, **fields}, sort_keys=True))
 
 
+def _log_model_metrics(
+    response: ModelResponse,
+    phase: str,
+    attempt: int | None = None,
+) -> None:
+    """Log Ollama timings and token counts without conversational content."""
+
+    if response.metrics is None:
+        return
+    fields: dict[str, Any] = {
+        "phase": phase,
+        "total_ms": response.metrics.total_ms,
+        "load_ms": response.metrics.load_ms,
+        "prompt_eval_ms": response.metrics.prompt_eval_ms,
+        "generation_ms": response.metrics.generation_ms,
+        "prompt_tokens": response.metrics.prompt_tokens,
+        "output_tokens": response.metrics.output_tokens,
+    }
+    if attempt is not None:
+        fields["attempt"] = attempt
+    _log_tool_event("model_response_metrics", **fields)
+
+
 @dataclass(frozen=True)
 class ToolExecution:
     """One validated model tool request and its resulting output."""
@@ -62,6 +85,7 @@ class ServerAssistant:
 
         for attempt in range(2):
             response = self.model.chat(messages, tools=definitions)
+            _log_model_metrics(response, "tool_selection", attempt + 1)
             requested_name = (
                 response.tool_calls[0].get("name")
                 if len(response.tool_calls) == 1
@@ -154,6 +178,7 @@ class ServerAssistant:
             ]
         )
         final_response = self.model.chat(messages, tools=definitions)
+        _log_model_metrics(final_response, "final_answer")
         if final_response.tool_calls:
             raise ValueError("Model requested another tool instead of answering")
         if not final_response.content.strip():

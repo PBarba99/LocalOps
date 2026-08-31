@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from localops.config import Settings
-from localops.ollama_client import ModelResponse, OllamaClient
+from localops.ollama_client import ModelMetrics, ModelResponse, OllamaClient
 
 
 def test_ollama_client_uses_validated_settings() -> None:
@@ -102,4 +102,39 @@ def test_chat_sends_tools_and_normalizes_requested_tool_calls() -> None:
     assert response == ModelResponse(
         content="",
         tool_calls=({"name": "get_memory_usage", "arguments": {}},),
+    )
+
+
+def test_chat_normalizes_ollama_performance_metrics() -> None:
+    settings = Settings(
+        server_host="homeserver",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        _env_file=None,
+    )
+    sdk_client = MagicMock()
+    raw_response = sdk_client.chat.return_value
+    raw_response.message.content = "done"
+    raw_response.message.tool_calls = None
+    raw_response.total_duration = 2_500_000_000
+    raw_response.load_duration = 1_200_000_000
+    raw_response.prompt_eval_duration = 300_000_000
+    raw_response.eval_duration = 900_000_000
+    raw_response.prompt_eval_count = 120
+    raw_response.eval_count = 24
+
+    with patch.object(
+        OllamaClient, "_create_client", return_value=sdk_client
+    ):
+        response = OllamaClient(settings).chat(
+            [{"role": "user", "content": "test"}]
+        )
+
+    assert response.metrics == ModelMetrics(
+        total_ms=2500.0,
+        load_ms=1200.0,
+        prompt_eval_ms=300.0,
+        generation_ms=900.0,
+        prompt_tokens=120,
+        output_tokens=24,
     )

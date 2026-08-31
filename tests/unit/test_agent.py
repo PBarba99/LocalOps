@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from localops.agent import ServerAssistant, ToolExecution
-from localops.ollama_client import ModelResponse
+from localops.ollama_client import ModelMetrics, ModelResponse
 from localops.prompts import SYSTEM_PROMPT
 from localops.tools.registry import InvalidToolRequest
 
@@ -281,3 +281,51 @@ def test_operational_failure_log_uses_exception_type_only(
         "tool_name": "get_system_info",
     }
     assert "sensitive connection details" not in caplog.records[-1].message
+
+
+def test_answer_logs_separate_selection_and_final_model_metrics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = MagicMock()
+    tools = MagicMock()
+    model.chat.side_effect = [
+        ModelResponse(
+            content="",
+            tool_calls=({"name": "get_memory_usage", "arguments": {}},),
+            metrics=ModelMetrics(
+                total_ms=1200.0,
+                load_ms=800.0,
+                prompt_eval_ms=100.0,
+                generation_ms=300.0,
+                prompt_tokens=90,
+                output_tokens=8,
+            ),
+        ),
+        ModelResponse(
+            content="6.6 GiB is available.",
+            metrics=ModelMetrics(
+                total_ms=600.0,
+                load_ms=0.0,
+                prompt_eval_ms=200.0,
+                generation_ms=400.0,
+                prompt_tokens=160,
+                output_tokens=12,
+            ),
+        ),
+    ]
+    tools.invoke.return_value = "Memory usage:\navailable 6.6Gi"
+
+    with caplog.at_level(logging.INFO, logger="localops.agent"):
+        ServerAssistant(model=model, tools=tools).answer("Memory?")
+
+    metrics = [
+        json.loads(record.message)
+        for record in caplog.records
+        if json.loads(record.message)["event"] == "model_response_metrics"
+    ]
+    assert metrics[0]["phase"] == "tool_selection"
+    assert metrics[0]["attempt"] == 1
+    assert metrics[0]["load_ms"] == 800.0
+    assert metrics[1]["phase"] == "final_answer"
+    assert "attempt" not in metrics[1]
+    assert metrics[1]["generation_ms"] == 400.0
