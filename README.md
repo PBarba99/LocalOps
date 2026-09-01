@@ -1,5 +1,7 @@
 # LocalOps
 
+[![Tests](https://github.com/PBarba99/LocalOps/actions/workflows/tests.yml/badge.svg)](https://github.com/PBarba99/LocalOps/actions/workflows/tests.yml)
+
 LocalOps is a local AI assistant for inspecting a Linux home server. The
 application runs on Windows, uses Llama 3.1 8B through Ollama, and retrieves
 live server information over SSH through predefined read-only tools.
