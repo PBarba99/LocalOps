@@ -13,7 +13,7 @@ immutable allowlist. Unsupported requests are declined with fixed
 application-owned text without connecting to the server. An interactive
 command-line interface is available.
 
-## Version 0.1 goal
+## Core flow
 
 Prove this end-to-end flow:
 
@@ -50,6 +50,8 @@ tests/
   integration/        End-to-end flow tests
 docs/                 Architecture and development notes
 ```
+
+Release history is recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Local setup
 

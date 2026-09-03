@@ -56,13 +56,13 @@ operational failures.
 
 ## Interface
 
-Version 0.1 uses an interactive terminal loop. It builds the model, registry,
-and SSH client from one validated settings object, accepts repeated questions,
-and keeps running after expected operational errors. Tool events are written to
-a rotating local file under `.localops/`; conversational content remains in the
-terminal and is not logged.
+LocalOps currently uses an interactive terminal loop. It builds the model,
+registry, and SSH client from one validated settings object, accepts repeated
+questions, and keeps running after expected operational errors. Tool events are
+written to a rotating local file under `.localops/`; conversational content
+remains in the terminal and is not logged.
 
-## Version 0.1 non-goals
+## Current non-goals
 
 - Changing server state
 - Arbitrary commands
