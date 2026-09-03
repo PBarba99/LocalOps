@@ -9,7 +9,9 @@ live server information over SSH through predefined read-only tools.
 The configuration, restricted SSH boundary, three read-only inspection tools,
 Ollama tool calling, and agent loop are implemented. LocalOps can answer a
 natural-language question using live server data selected through a fixed,
-immutable allowlist. An interactive command-line interface is available.
+immutable allowlist. Unsupported requests are declined with fixed
+application-owned text without connecting to the server. An interactive
+command-line interface is available.
 
 ## Version 0.1 goal
 
@@ -39,6 +41,7 @@ src/localops/
   agent.py            Model/tool orchestration
   config.py           Environment configuration
   ollama_client.py    Local model boundary
+  request_policy.py   Fixed non-command decisions and responses
   ssh_client.py       Restricted SSH boundary
   prompts.py          Agent instructions
   tools/              Explicit read-only tools and registry
@@ -108,6 +111,11 @@ You: How much memory is currently available?
 You: What operating system is the server running?
 ```
 
+Questions outside the available server inspection tools, such as a weather
+question, receive a fixed explanation of the assistant's scope. Requests to
+modify the server use the same controlled decline path. Neither case opens an
+SSH connection.
+
 Enter `exit` or `quit` to stop. Expected connection, model, command, and tool
 validation failures are displayed concisely and return to the prompt. `Ctrl+C`
 and end-of-input exit cleanly.
@@ -131,22 +139,22 @@ configuration, and private-key paths.
   command timeouts, non-zero exits, tool failure behavior, and cleanup.
 - All three inspection tools have passed live smoke tests against the target
   server.
-- Ollama receives only three zero-argument tool schemas. Model requests are
-  strictly validated before invocation, and one corrective retry is allowed for
-  an invalid request.
+- Ollama receives four zero-argument action schemas: three inspection tools and
+  `decline_unsupported_request`. Model requests are strictly validated before
+  invocation, and one corrective retry is allowed for an invalid request.
 - The agent returns tool output to Ollama for a grounded final answer. Structured
   JSON logs record tool selection and outcomes without questions, command
   output, SSH settings, or private-key paths.
 - The model instructions require quantities and units to be copied exactly from
-  tool output. Requests to modify the server must be refused, including repeated
-  requests, and unavailable commands or tool calls must not be suggested.
+  tool output. Unsupported questions and requests to modify the server select an
+  immutable application response without SSH or a second model call.
 - The full question-to-answer flow has been verified live with system, memory,
   and disk questions.
 - The interactive CLI constructs the complete application, accepts repeated
   questions, reports expected failures without a traceback, and exits cleanly.
 - Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,
-  response latency, and refusal of write operations. Qwen 3 4B remains available
-  as a configuration-only fallback.
+  response latency, unsupported general questions, and refusal of write
+  operations. Qwen 3 4B remains available as a configuration-only fallback.
 
 ## License
 

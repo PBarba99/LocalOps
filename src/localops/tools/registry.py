@@ -7,6 +7,11 @@ from enum import Enum, unique
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from ..request_policy import (
+    ControlActionID,
+    lookup_control_response,
+)
+
 if TYPE_CHECKING:
     from ..ssh_client import SSHClient
 
@@ -59,7 +64,7 @@ class ToolRegistry:
     ssh: SSHClient | None = None
 
     def definitions(self) -> list[dict[str, Any]]:
-        """Return the fixed zero-argument tools visible to the model."""
+        """Return the fixed zero-argument actions visible to the model."""
 
         descriptions = (
             (
@@ -73,6 +78,11 @@ class ToolRegistry:
             (
                 "get_disk_usage",
                 "Get current disk usage for the server's mounted filesystems.",
+            ),
+            (
+                ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
+                "Decline a request that cannot be answered using the available "
+                "read-only server inspection tools.",
             ),
         )
         return [
@@ -93,7 +103,7 @@ class ToolRegistry:
         ]
 
     def invoke(self, name: str, arguments: dict[str, Any]) -> str:
-        """Invoke one fixed zero-argument tool after strict validation."""
+        """Invoke one fixed zero-argument action after strict validation."""
 
         from .disk import get_disk_usage
         from .memory import get_memory_usage
@@ -104,10 +114,17 @@ class ToolRegistry:
             "get_memory_usage": get_memory_usage,
             "get_disk_usage": get_disk_usage,
         }
-        if not isinstance(name, str) or name not in tools:
+        control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
+        if not isinstance(name, str) or (
+            name not in tools and name != control_name
+        ):
             raise InvalidToolRequest(f"Unknown tool: {name!r}")
         if not isinstance(arguments, dict) or arguments:
             raise InvalidToolRequest(f"Tool {name!r} accepts no arguments")
+        if name == control_name:
+            return lookup_control_response(
+                ControlActionID.DECLINE_UNSUPPORTED_REQUEST
+            )
         if self.ssh is None:
             raise RuntimeError("Tool registry has no SSH client")
 

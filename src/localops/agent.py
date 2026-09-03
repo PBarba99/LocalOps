@@ -7,6 +7,7 @@ from typing import Any
 
 from .ollama_client import ModelResponse, OllamaClient
 from .prompts import SYSTEM_PROMPT
+from .request_policy import ControlActionID
 from .tools.registry import InvalidToolRequest, ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,11 @@ class ServerAssistant:
         messages = self._initial_messages(question)
         definitions = self.tools.definitions()
         selection, execution = self._select_and_execute(messages, definitions)
+        if (
+            execution.name
+            == ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
+        ):
+            return execution.output
         tool_call = selection.tool_calls[0]
         messages.extend(
             [

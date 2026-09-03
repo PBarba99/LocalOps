@@ -9,7 +9,8 @@ import pytest
 from localops.agent import ServerAssistant, ToolExecution
 from localops.ollama_client import ModelMetrics, ModelResponse
 from localops.prompts import SYSTEM_PROMPT
-from localops.tools.registry import InvalidToolRequest
+from localops.request_policy import ControlActionID, lookup_control_response
+from localops.tools.registry import InvalidToolRequest, ToolRegistry
 
 
 def test_run_requested_tool_selects_and_invokes_one_fixed_tool() -> None:
@@ -123,6 +124,24 @@ def test_answer_sends_tool_output_back_and_returns_final_text() -> None:
         },
     ]
     assert model.chat.call_args_list[1].kwargs == {"tools": definitions}
+
+
+def test_answer_returns_fixed_decline_without_ssh_or_second_model_call() -> None:
+    model = MagicMock()
+    model.chat.return_value = ModelResponse(
+        content="",
+        tool_calls=(
+            {"name": "decline_unsupported_request", "arguments": {}},
+        ),
+    )
+    assistant = ServerAssistant(model=model, tools=ToolRegistry())
+
+    answer = assistant.answer("What day is it?")
+
+    assert answer == lookup_control_response(
+        ControlActionID.DECLINE_UNSUPPORTED_REQUEST
+    )
+    model.chat.assert_called_once()
 
 
 @pytest.mark.parametrize(
