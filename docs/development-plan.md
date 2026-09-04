@@ -23,3 +23,10 @@ questions, along with repeated attempts to request prohibited write operations.
 - [x] Return the fixed response without SSH or a second model request.
 - [x] Test valid inspection questions, unsupported general questions, and
   prohibited server modifications in the live CLI.
+
+## Version 0.3 progress
+
+- [x] Add fixed CPU-count and load-average commands to the immutable allowlist.
+- [x] Implement and validate the `get_cpu_load` inspection tool.
+- [x] Verify CPU-load selection and existing questions in the live CLI.
+- [ ] Add running and failed systemd service inspection.

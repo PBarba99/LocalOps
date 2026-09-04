@@ -30,6 +30,8 @@ class CommandID(str, Enum):
     UPTIME = "uptime"
     MEMORY_USAGE = "memory_usage"
     DISK_USAGE = "disk_usage"
+    CPU_COUNT = "cpu_count"
+    LOAD_AVERAGE = "load_average"
 
 
 # Construct the proxy inline so no mutable backing dictionary is retained.
@@ -41,6 +43,8 @@ COMMAND_ALLOWLIST = MappingProxyType(
         CommandID.UPTIME: "uptime",
         CommandID.MEMORY_USAGE: "free -h",
         CommandID.DISK_USAGE: "df -h",
+        CommandID.CPU_COUNT: "nproc",
+        CommandID.LOAD_AVERAGE: "cat /proc/loadavg",
     }
 )
 
@@ -80,6 +84,10 @@ class ToolRegistry:
                 "Get current disk usage for the server's mounted filesystems.",
             ),
             (
+                "get_cpu_load",
+                "Get the server's CPU count and current load averages.",
+            ),
+            (
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
                 "Decline a request that cannot be answered using the available "
                 "read-only server inspection tools.",
@@ -105,6 +113,7 @@ class ToolRegistry:
     def invoke(self, name: str, arguments: dict[str, Any]) -> str:
         """Invoke one fixed zero-argument action after strict validation."""
 
+        from .cpu import get_cpu_load
         from .disk import get_disk_usage
         from .memory import get_memory_usage
         from .system import get_system_info
@@ -113,6 +122,7 @@ class ToolRegistry:
             "get_system_info": get_system_info,
             "get_memory_usage": get_memory_usage,
             "get_disk_usage": get_disk_usage,
+            "get_cpu_load": get_cpu_load,
         }
         control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
         if not isinstance(name, str) or (

@@ -14,6 +14,8 @@ EXPECTED_COMMANDS = {
     CommandID.UPTIME: "uptime",
     CommandID.MEMORY_USAGE: "free -h",
     CommandID.DISK_USAGE: "df -h",
+    CommandID.CPU_COUNT: "nproc",
+    CommandID.LOAD_AVERAGE: "cat /proc/loadavg",
 }
 
 

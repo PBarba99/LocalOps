@@ -24,7 +24,7 @@ User -> Agent -> Ollama -> one validated action
                          `-> decline unsupported request -> fixed local response
 ```
 
-Ollama sees four zero-argument schemas: three inspection tools and one controlled
+Ollama sees five zero-argument schemas: four inspection tools and one controlled
 decline action. LocalOps requires exactly one request, validates its exact name
 and empty arguments, and permits one corrective model retry after an invalid
 request. A second invalid request fails closed; SSH, timeout, and remote command
