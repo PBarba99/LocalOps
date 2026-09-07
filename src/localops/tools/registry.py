@@ -32,6 +32,8 @@ class CommandID(str, Enum):
     DISK_USAGE = "disk_usage"
     CPU_COUNT = "cpu_count"
     LOAD_AVERAGE = "load_average"
+    RUNNING_SERVICES = "running_services"
+    FAILED_SERVICES = "failed_services"
 
 
 # Construct the proxy inline so no mutable backing dictionary is retained.
@@ -45,6 +47,14 @@ COMMAND_ALLOWLIST = MappingProxyType(
         CommandID.DISK_USAGE: "df -h",
         CommandID.CPU_COUNT: "nproc",
         CommandID.LOAD_AVERAGE: "cat /proc/loadavg",
+        CommandID.RUNNING_SERVICES: (
+            "systemctl list-units --type=service --state=running "
+            "--no-pager --no-legend --plain"
+        ),
+        CommandID.FAILED_SERVICES: (
+            "systemctl list-units --type=service --state=failed "
+            "--no-pager --no-legend --plain"
+        ),
     }
 )
 
@@ -88,6 +98,10 @@ class ToolRegistry:
                 "Get the server's CPU count and current load averages.",
             ),
             (
+                "get_service_status",
+                "Get the server's running and failed systemd services.",
+            ),
+            (
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
                 "Decline a request that cannot be answered using the available "
                 "read-only server inspection tools.",
@@ -116,6 +130,7 @@ class ToolRegistry:
         from .cpu import get_cpu_load
         from .disk import get_disk_usage
         from .memory import get_memory_usage
+        from .services import get_service_status
         from .system import get_system_info
 
         tools = {
@@ -123,6 +138,7 @@ class ToolRegistry:
             "get_memory_usage": get_memory_usage,
             "get_disk_usage": get_disk_usage,
             "get_cpu_load": get_cpu_load,
+            "get_service_status": get_service_status,
         }
         control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
         if not isinstance(name, str) or (

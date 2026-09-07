@@ -6,7 +6,7 @@ LocalOps is a local AI assistant for inspecting a Linux home server. The
 application runs on Windows, uses Llama 3.1 8B through Ollama, and retrieves
 live server information over SSH through predefined read-only tools.
 
-The configuration, restricted SSH boundary, four read-only inspection tools,
+The configuration, restricted SSH boundary, five read-only inspection tools,
 Ollama tool calling, and agent loop are implemented. LocalOps can answer a
 natural-language question using live server data selected through a fixed,
 immutable allowlist. Unsupported requests are declined with fixed
@@ -31,6 +31,7 @@ Inspection tools:
 - `get_memory_usage()`
 - `get_disk_usage()`
 - `get_cpu_load()`
+- `get_service_status()`
 
 The model will not receive arbitrary shell access.
 
@@ -135,14 +136,14 @@ configuration, and private-key paths.
 - The SSH client rejects raw command text, uses the configured private key, and
   returns stdout, stderr, and the remote exit code. Connection and command waits
   have bounded timeouts.
-- System, memory, disk, and CPU-load tools execute only their assigned
-  `CommandID` values. They fail immediately on a non-zero exit while preserving
-  stdout and stderr for diagnosis.
+- System, memory, disk, CPU-load, and service-status tools execute only their
+  assigned `CommandID` values. They fail immediately on a non-zero exit while
+  preserving stdout and stderr for diagnosis.
 - Unit tests cover command injection, connection failures, execution failures,
   command timeouts, non-zero exits, tool failure behavior, and cleanup.
-- All four inspection tools have passed live smoke tests against the target
+- All five inspection tools have passed live smoke tests against the target
   server.
-- Ollama receives five zero-argument action schemas: four inspection tools and
+- Ollama receives six zero-argument action schemas: five inspection tools and
   `decline_unsupported_request`. Model requests are strictly validated before
   invocation, and one corrective retry is allowed for an invalid request.
 - The agent returns tool output to Ollama for a grounded final answer. Structured
@@ -152,7 +153,7 @@ configuration, and private-key paths.
   tool output. Unsupported questions and requests to modify the server select an
   immutable application response without SSH or a second model call.
 - The full question-to-answer flow has been verified live with system, memory,
-  disk, and CPU-load questions.
+  disk, CPU-load, and systemd service questions.
 - The interactive CLI constructs the complete application, accepts repeated
   questions, reports expected failures without a traceback, and exits cleanly.
 - Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,

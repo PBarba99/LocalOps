@@ -29,4 +29,12 @@ questions, along with repeated attempts to request prohibited write operations.
 - [x] Add fixed CPU-count and load-average commands to the immutable allowlist.
 - [x] Implement and validate the `get_cpu_load` inspection tool.
 - [x] Verify CPU-load selection and existing questions in the live CLI.
-- [ ] Add running and failed systemd service inspection.
+- [x] Add running and failed systemd service inspection.
+- [x] Verify service selection, empty failed-service output, and existing tools
+  in the live CLI.
+- [ ] Preload the configured Ollama model before displaying the first CLI
+  prompt, with an honest loading indicator and clear startup failures.
+- [ ] Keep the model resident while the CLI session is active and test warm-up,
+  readiness, and failure behavior.
+- [ ] Add restricted network interface status inspection.
+- [ ] Add restricted available-package-update inspection.

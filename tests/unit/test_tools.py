@@ -16,6 +16,14 @@ EXPECTED_COMMANDS = {
     CommandID.DISK_USAGE: "df -h",
     CommandID.CPU_COUNT: "nproc",
     CommandID.LOAD_AVERAGE: "cat /proc/loadavg",
+    CommandID.RUNNING_SERVICES: (
+        "systemctl list-units --type=service --state=running "
+        "--no-pager --no-legend --plain"
+    ),
+    CommandID.FAILED_SERVICES: (
+        "systemctl list-units --type=service --state=failed "
+        "--no-pager --no-legend --plain"
+    ),
 }
 
 

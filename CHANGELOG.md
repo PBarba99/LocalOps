@@ -8,6 +8,8 @@ All notable changes to LocalOps are documented in this file.
 
 - Added `get_cpu_load`, backed by fixed `nproc` and `/proc/loadavg` commands, to
   report CPU capacity and current 1-, 5-, and 15-minute load averages.
+- Added `get_service_status`, backed by fixed systemd queries, to report running
+  and failed services without accepting service names or command arguments.
 
 ## [0.2.0] - 2026-09-03
 
