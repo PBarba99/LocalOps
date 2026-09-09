@@ -13,6 +13,22 @@ from localops.request_policy import ControlActionID, lookup_control_response
 from localops.tools.registry import InvalidToolRequest, ToolRegistry
 
 
+def test_warm_up_primes_system_prompt_and_definitions_without_invoking_tool() -> None:
+    model = MagicMock()
+    tools = MagicMock()
+    definitions = [{"type": "function", "function": {"name": "get_cpu_load"}}]
+    tools.definitions.return_value = definitions
+    assistant = ServerAssistant(model=model, tools=tools)
+
+    assistant.warm_up()
+
+    model.warm_up.assert_called_once_with(
+        [{"role": "system", "content": SYSTEM_PROMPT}],
+        definitions,
+    )
+    tools.invoke.assert_not_called()
+
+
 def test_run_requested_tool_selects_and_invokes_one_fixed_tool() -> None:
     model = MagicMock()
     tools = MagicMock()

@@ -3,6 +3,9 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import ollama
+import pytest
+
 from localops.config import Settings
 from localops.ollama_client import ModelMetrics, ModelResponse, OllamaClient
 
@@ -38,6 +41,78 @@ def test_sdk_client_uses_configured_ollama_endpoint() -> None:
     assert sdk_client is client_class.return_value
 
 
+def test_warm_up_loads_model_and_primes_supplied_prompt_prefix() -> None:
+    settings = Settings(
+        server_host="homeserver",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        ollama_model="llama3.1:8b",
+        _env_file=None,
+    )
+    messages = [{"role": "system", "content": "System instructions"}]
+    tools = [{"type": "function", "function": {"name": "get_system_info"}}]
+    sdk_client = MagicMock()
+
+    with patch.object(
+        OllamaClient, "_create_client", return_value=sdk_client
+    ):
+        result = OllamaClient(settings).warm_up(messages, tools)
+
+    assert result is None
+    sdk_client.chat.assert_called_once_with(
+        model="llama3.1:8b",
+        messages=messages,
+        tools=tools,
+        stream=False,
+        keep_alive=-1,
+        options={"num_predict": 1},
+    )
+
+
+def test_warm_up_propagates_ollama_failures() -> None:
+    settings = Settings(
+        server_host="homeserver",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        _env_file=None,
+    )
+    messages = [{"role": "system", "content": "System instructions"}]
+    tools = [{"type": "function", "function": {"name": "get_system_info"}}]
+    sdk_client = MagicMock()
+    sdk_client.chat.side_effect = ollama.ResponseError(
+        "model unavailable", status_code=404
+    )
+
+    with patch.object(
+        OllamaClient, "_create_client", return_value=sdk_client
+    ):
+        with pytest.raises(ollama.ResponseError, match="model unavailable"):
+            OllamaClient(settings).warm_up(messages, tools)
+
+
+def test_unload_releases_configured_model() -> None:
+    settings = Settings(
+        server_host="homeserver",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        ollama_model="llama3.1:8b",
+        _env_file=None,
+    )
+    sdk_client = MagicMock()
+
+    with patch.object(
+        OllamaClient, "_create_client", return_value=sdk_client
+    ):
+        result = OllamaClient(settings).unload()
+
+    assert result is None
+    sdk_client.generate.assert_called_once_with(
+        model="llama3.1:8b",
+        stream=False,
+        keep_alive=0,
+    )
+
+
 def test_chat_uses_configured_model_and_returns_normalized_response() -> None:
     settings = Settings(
         server_host="homeserver",
@@ -59,6 +134,7 @@ def test_chat_uses_configured_model_and_returns_normalized_response() -> None:
         model="qwen3:4b",
         messages=messages,
         stream=False,
+        keep_alive=-1,
     )
     assert response == ModelResponse(content="pong")
 
@@ -97,6 +173,7 @@ def test_chat_sends_tools_and_normalizes_requested_tool_calls() -> None:
         model="qwen3:4b",
         messages=messages,
         stream=False,
+        keep_alive=-1,
         tools=tools,
     )
     assert response == ModelResponse(

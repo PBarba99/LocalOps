@@ -9,7 +9,7 @@ import ollama
 import paramiko
 import pytest
 
-from localops.app import build_assistant, configure_logging, run_cli
+from localops.app import CLI_BANNER, build_assistant, configure_logging, run_cli
 from localops.config import Settings
 from localops.ollama_client import OllamaClient
 from localops.ssh_client import CommandResult, SSHClient
@@ -82,12 +82,16 @@ def test_run_cli_answers_questions_until_exit() -> None:
         call("How much storage is available?"),
     ]
     assert [output_call.args[0] for output_call in output.call_args_list] == [
-        "LocalOps - read-only server assistant",
+        CLI_BANNER,
+        "Loading local model...",
+        "Model ready.",
         "Type 'exit' or 'quit' to stop.",
         "LocalOps: 6.6 GiB available",
         "LocalOps: 183 GiB available",
         "Goodbye.",
     ]
+    assistant.warm_up.assert_called_once_with()
+    assistant.model.unload.assert_called_once_with()
 
 
 def test_run_cli_ignores_blank_questions() -> None:
@@ -101,6 +105,40 @@ def test_run_cli_ignores_blank_questions() -> None:
     assert "Please enter a question." in [
         output_call.args[0] for output_call in output.call_args_list
     ]
+
+
+def test_run_cli_stops_before_prompt_when_model_warm_up_fails() -> None:
+    assistant = MagicMock()
+    assistant.warm_up.side_effect = ollama.ResponseError(
+        "model unavailable", status_code=404
+    )
+    input_fn = MagicMock()
+    output = MagicMock()
+
+    run_cli(assistant, input_fn=input_fn, output_fn=output)
+
+    input_fn.assert_not_called()
+    assistant.answer.assert_not_called()
+    assistant.model.unload.assert_not_called()
+    assert [call.args[0] for call in output.call_args_list] == [
+        CLI_BANNER,
+        "Loading local model...",
+        (
+            "Error: the local model could not be loaded. Check that Ollama "
+            "and the configured model are available."
+        ),
+    ]
+
+
+def test_run_cli_ignores_unload_failure_during_clean_exit() -> None:
+    assistant = MagicMock()
+    assistant.model.unload.side_effect = ConnectionError("Ollama stopped")
+    output = MagicMock()
+
+    run_cli(assistant, input_fn=lambda _: "quit", output_fn=output)
+
+    assistant.model.unload.assert_called_once_with()
+    assert output.call_args_list[-1] == call("Goodbye.")
 
 
 @pytest.mark.parametrize(

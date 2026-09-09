@@ -45,6 +45,31 @@ class OllamaClient:
 
     settings: Settings
 
+    def warm_up(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> None:
+        """Load the model and prime the repeated chat prompt prefix."""
+
+        self._create_client().chat(
+            model=self.settings.ollama_model,
+            messages=messages,
+            tools=tools,
+            stream=False,
+            keep_alive=-1,
+            options={"num_predict": 1},
+        )
+
+    def unload(self) -> None:
+        """Unload the configured model after the CLI session ends."""
+
+        self._create_client().generate(
+            model=self.settings.ollama_model,
+            stream=False,
+            keep_alive=0,
+        )
+
     def _create_client(self) -> ollama.Client:
         """Create an SDK client for the validated Ollama endpoint."""
 
@@ -61,6 +86,7 @@ class OllamaClient:
             "model": self.settings.ollama_model,
             "messages": messages,
             "stream": False,
+            "keep_alive": -1,
         }
         if tools is not None:
             request["tools"] = tools

@@ -10,6 +10,9 @@ All notable changes to LocalOps are documented in this file.
   report CPU capacity and current 1-, 5-, and 15-minute load averages.
 - Added `get_service_status`, backed by fixed systemd queries, to report running
   and failed services without accepting service names or command arguments.
+- Added an ASCII CLI banner and explicit model-loading and readiness states.
+- Added prompt-aware Ollama warm-up before the first question, session-long
+  model retention, clean unloading on exit, and startup failure handling.
 
 ## [0.2.0] - 2026-09-03
 

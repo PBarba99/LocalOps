@@ -55,6 +55,14 @@ class ServerAssistant:
     model: OllamaClient
     tools: ToolRegistry
 
+    def warm_up(self) -> None:
+        """Load the model and prime its stable system-and-tool prompt prefix."""
+
+        self.model.warm_up(
+            [{"role": "system", "content": SYSTEM_PROMPT}],
+            self.tools.definitions(),
+        )
+
     @staticmethod
     def _initial_messages(question: str) -> list[dict[str, object]]:
         return [

@@ -62,6 +62,13 @@ questions, and keeps running after expected operational errors. Tool events are
 written to a rotating local file under `.localops/`; conversational content
 remains in the terminal and is not logged.
 
+Before displaying the first input prompt, the CLI asks the agent to warm the
+model with the real system prompt and action schemas. Ollama evaluates that
+stable prefix while the loading state is visible, generates at most one ignored
+token, and never invokes the selected action. Chat requests keep the model
+resident for the session; CLI shutdown sends a best-effort unload request.
+Warm-up failures stop before user input rather than creating a broken session.
+
 ## Current non-goals
 
 - Changing server state

@@ -107,6 +107,12 @@ Alternatively:
 .\.venv\Scripts\python.exe -m localops.app
 ```
 
+At startup, the CLI displays an ASCII banner and a model-loading status. It
+loads the configured model and primes the stable system prompt and action
+schemas before displaying the first `You:` prompt. The model remains resident
+for the CLI session and is unloaded on exit. If warm-up fails, LocalOps reports
+the problem without entering an unusable question loop.
+
 Ask natural-language questions such as:
 
 ```text
@@ -131,6 +137,8 @@ configuration, and private-key paths.
 ## Current status
 
 - Environment configuration is loaded, validated, and immutable.
+- The CLI preloads and primes Ollama before accepting a question, keeps the
+  model resident during the session, and unloads it during clean shutdown.
 - Six reviewed read-only commands are represented by `CommandID` and stored in
   an immutable allowlist.
 - The SSH client rejects raw command text, uses the configured private key, and

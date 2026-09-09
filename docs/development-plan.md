@@ -32,9 +32,9 @@ questions, along with repeated attempts to request prohibited write operations.
 - [x] Add running and failed systemd service inspection.
 - [x] Verify service selection, empty failed-service output, and existing tools
   in the live CLI.
-- [ ] Preload the configured Ollama model before displaying the first CLI
+- [x] Preload the configured Ollama model before displaying the first CLI
   prompt, with an honest loading indicator and clear startup failures.
-- [ ] Keep the model resident while the CLI session is active and test warm-up,
+- [x] Keep the model resident while the CLI session is active and test warm-up,
   readiness, and failure behavior.
 - [ ] Add restricted network interface status inspection.
 - [ ] Add restricted available-package-update inspection.

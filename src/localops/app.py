@@ -16,6 +16,15 @@ from .tools.errors import ToolCommandError
 from .tools.registry import InvalidToolRequest, ToolRegistry
 
 DEFAULT_LOG_PATH = Path(".localops/localops.log")
+CLI_BANNER = r"""
+ _                     _  ___
+| |    ___   ___  __ _| |/ _ \ _ __  ___
+| |   / _ \ / __|/ _` | | | | | '_ \/ __|
+| |__| (_) | (__| (_| | | |_| | |_) \__ \
+|_____\___/ \___|\__,_|_|\___/| .__/|___/
+                              |_|
+        READ-ONLY SERVER ASSISTANT
+""".strip("\n")
 
 
 def configure_logging(
@@ -65,61 +74,83 @@ def run_cli(
 ) -> None:
     """Run the interactive LocalOps question-and-answer loop."""
 
-    output_fn("LocalOps - read-only server assistant")
+    output_fn(CLI_BANNER)
+    output_fn("Loading local model...")
+    try:
+        assistant.warm_up()
+    except (ollama.RequestError, ollama.ResponseError, OSError):
+        output_fn(
+            "Error: the local model could not be loaded. Check that Ollama "
+            "and the configured model are available."
+        )
+        return
+    except KeyboardInterrupt:
+        output_fn("Goodbye.")
+        return
+
+    output_fn("Model ready.")
     output_fn("Type 'exit' or 'quit' to stop.")
 
-    while True:
-        try:
-            question = input_fn("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            output_fn("Goodbye.")
-            return
+    try:
+        while True:
+            try:
+                question = input_fn("You: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                output_fn("Goodbye.")
+                return
 
-        if question.lower() in {"exit", "quit"}:
-            output_fn("Goodbye.")
-            return
-        if not question:
-            output_fn("Please enter a question.")
-            continue
+            if question.lower() in {"exit", "quit"}:
+                output_fn("Goodbye.")
+                return
+            if not question:
+                output_fn("Please enter a question.")
+                continue
 
+            try:
+                answer = assistant.answer(question)
+            except InvalidToolRequest:
+                output_fn(
+                    "Error: the local model could not produce a valid tool request "
+                    "after one correction. Try rephrasing the question."
+                )
+            except ToolCommandError as exc:
+                diagnostic = (exc.result.stderr or exc.result.stdout).strip()
+                detail = f" Details: {diagnostic}" if diagnostic else ""
+                output_fn(
+                    f"Error: {exc.command_id.name} failed with exit code "
+                    f"{exc.result.exit_code}.{detail}"
+                )
+            except paramiko.AuthenticationException:
+                output_fn(
+                    "Error: SSH authentication failed. Check the configured key."
+                )
+            except paramiko.BadHostKeyException:
+                output_fn("Error: the server SSH host key did not match known_hosts.")
+            except TimeoutError:
+                output_fn(
+                    "Error: the connection or command timed out. Check the VPN and "
+                    "server availability."
+                )
+            except (ollama.RequestError, ollama.ResponseError):
+                output_fn(
+                    "Error: the local Ollama request failed. Check that Ollama and "
+                    "the configured model are available."
+                )
+            except (paramiko.SSHException, OSError):
+                output_fn(
+                    "Error: a connection failed. Check Ollama, the VPN, and the "
+                    "server availability."
+                )
+            except KeyboardInterrupt:
+                output_fn("Goodbye.")
+                return
+            else:
+                output_fn(f"LocalOps: {answer}")
+    finally:
         try:
-            answer = assistant.answer(question)
-        except InvalidToolRequest:
-            output_fn(
-                "Error: the local model could not produce a valid tool request "
-                "after one correction. Try rephrasing the question."
-            )
-        except ToolCommandError as exc:
-            diagnostic = (exc.result.stderr or exc.result.stdout).strip()
-            detail = f" Details: {diagnostic}" if diagnostic else ""
-            output_fn(
-                f"Error: {exc.command_id.name} failed with exit code "
-                f"{exc.result.exit_code}.{detail}"
-            )
-        except paramiko.AuthenticationException:
-            output_fn("Error: SSH authentication failed. Check the configured key.")
-        except paramiko.BadHostKeyException:
-            output_fn("Error: the server SSH host key did not match known_hosts.")
-        except TimeoutError:
-            output_fn(
-                "Error: the connection or command timed out. Check the VPN and "
-                "server availability."
-            )
-        except (ollama.RequestError, ollama.ResponseError):
-            output_fn(
-                "Error: the local Ollama request failed. Check that Ollama and "
-                "the configured model are available."
-            )
-        except (paramiko.SSHException, OSError):
-            output_fn(
-                "Error: a connection failed. Check Ollama, the VPN, and the "
-                "server availability."
-            )
-        except KeyboardInterrupt:
-            output_fn("Goodbye.")
-            return
-        else:
-            output_fn(f"LocalOps: {answer}")
+            assistant.model.unload()
+        except (ollama.RequestError, ollama.ResponseError, OSError, KeyboardInterrupt):
+            pass
 
 
 def main() -> None:
