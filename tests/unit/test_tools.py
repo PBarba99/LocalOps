@@ -24,6 +24,8 @@ EXPECTED_COMMANDS = {
         "systemctl list-units --type=service --state=failed "
         "--no-pager --no-legend --plain"
     ),
+    CommandID.NETWORK_INTERFACES: "ip -brief address show",
+    CommandID.DEFAULT_ROUTE: "ip route show default",
 }
 
 

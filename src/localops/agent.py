@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from .ollama_client import ModelResponse, OllamaClient
-from .prompts import SYSTEM_PROMPT
+from .prompts import FINAL_ANSWER_PROMPT, SYSTEM_PROMPT
 from .request_policy import ControlActionID
 from .tools.registry import InvalidToolRequest, ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+MAX_TOOL_CALLS = 6
 
 
 def _log_tool_event(event: str, **fields: Any) -> None:
@@ -70,9 +72,37 @@ class ServerAssistant:
             {"role": "user", "content": question},
         ]
 
+    def _validate_tool_response(self, response: ModelResponse) -> None:
+        """Validate a complete model tool batch before executing any call."""
+
+        call_count = len(response.tool_calls)
+        if call_count == 0:
+            raise InvalidToolRequest("Model must request at least one tool")
+        if call_count > MAX_TOOL_CALLS:
+            raise InvalidToolRequest(
+                f"Model may request at most {MAX_TOOL_CALLS} tools; "
+                f"received {call_count}"
+            )
+
+        requested_names: set[str] = set()
+        for tool_call in response.tool_calls:
+            name = tool_call.get("name")
+            arguments = tool_call.get("arguments")
+            self.tools.validate_invocation(name, arguments)
+            if name in requested_names:
+                raise InvalidToolRequest(f"Duplicate tool request: {name!r}")
+            requested_names.add(name)
+
+        control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
+        if control_name in requested_names and call_count != 1:
+            raise InvalidToolRequest(
+                f"Tool {control_name!r} cannot be combined with inspection tools"
+            )
+
     def _execute_tool_response(self, response: ModelResponse) -> ToolExecution:
         """Validate and execute exactly one requested tool."""
 
+        self._validate_tool_response(response)
         if len(response.tool_calls) != 1:
             raise InvalidToolRequest(
                 "Model must request exactly one tool; "
@@ -85,15 +115,33 @@ class ServerAssistant:
         output = self.tools.invoke(name, arguments)
         return ToolExecution(name=name, output=output)
 
+    def _execute_tool_batch(
+        self, response: ModelResponse
+    ) -> tuple[ToolExecution, ...]:
+        """Validate a tool batch, then execute its calls sequentially."""
+
+        self._validate_tool_response(response)
+        executions = []
+        for tool_call in response.tool_calls:
+            name = tool_call["name"]
+            arguments = tool_call["arguments"]
+            output = self.tools.invoke(name, arguments)
+            executions.append(ToolExecution(name=name, output=output))
+        return tuple(executions)
+
     def _select_and_execute(
         self,
         messages: list[dict[str, object]],
         definitions: list[dict[str, object]],
-    ) -> tuple[ModelResponse, ToolExecution]:
+    ) -> tuple[ModelResponse, tuple[ToolExecution, ...]]:
         """Allow one correction retry for an invalid model tool request."""
 
         for attempt in range(2):
-            response = self.model.chat(messages, tools=definitions)
+            response = self.model.chat(
+                messages,
+                tools=definitions,
+                options={"temperature": 0},
+            )
             _log_model_metrics(response, "tool_selection", attempt + 1)
             requested_name = (
                 response.tool_calls[0].get("name")
@@ -107,7 +155,7 @@ class ServerAssistant:
                 tool_call_count=len(response.tool_calls),
             )
             try:
-                execution = self._execute_tool_response(response)
+                executions = self._execute_tool_batch(response)
             except InvalidToolRequest as exc:
                 _log_tool_event(
                     "tool_request_rejected",
@@ -125,8 +173,9 @@ class ServerAssistant:
                         "role": "user",
                         "content": (
                             f"Your previous tool request was invalid: {exc}. "
-                            "Choose exactly one available tool and pass an empty "
-                            "argument object {}."
+                            f"Choose between one and {MAX_TOOL_CALLS} distinct "
+                            "available tools and pass an empty argument object "
+                            "{} for each one."
                         ),
                     }
                 )
@@ -139,12 +188,19 @@ class ServerAssistant:
                 )
                 raise
             else:
+                success_fields: dict[str, Any]
+                if len(executions) == 1:
+                    success_fields = {"tool_name": executions[0].name}
+                else:
+                    success_fields = {
+                        "tool_names": [execution.name for execution in executions]
+                    }
                 _log_tool_event(
                     "tool_execution_succeeded",
                     attempt=attempt + 1,
-                    tool_name=execution.name,
+                    **success_fields,
                 )
-                return response, execution
+                return response, executions
 
         raise AssertionError("unreachable")
 
@@ -152,24 +208,27 @@ class ServerAssistant:
         """Ask the model to select and execute exactly one predefined tool."""
 
         messages = self._initial_messages(question)
-        response, execution = self._select_and_execute(
+        response, executions = self._select_and_execute(
             messages,
             self.tools.definitions(),
         )
-        return execution
+        if len(executions) != 1:
+            raise InvalidToolRequest(
+                "run_requested_tool requires exactly one selected tool"
+            )
+        return executions[0]
 
     def answer(self, question: str) -> str:
-        """Run one approved tool and ask the model to explain its result."""
+        """Run approved tools and ask the model to explain their results."""
 
         messages = self._initial_messages(question)
         definitions = self.tools.definitions()
-        selection, execution = self._select_and_execute(messages, definitions)
+        selection, executions = self._select_and_execute(messages, definitions)
         if (
-            execution.name
+            executions[0].name
             == ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
         ):
-            return execution.output
-        tool_call = selection.tool_calls[0]
+            return executions[0].output
         messages.extend(
             [
                 {
@@ -182,16 +241,21 @@ class ServerAssistant:
                                 "arguments": tool_call["arguments"],
                             }
                         }
+                        for tool_call in selection.tool_calls
                     ],
                 },
-                {
-                    "role": "tool",
-                    "tool_name": execution.name,
-                    "content": execution.output,
-                },
+                *[
+                    {
+                        "role": "tool",
+                        "tool_name": execution.name,
+                        "content": execution.output,
+                    }
+                    for execution in executions
+                ],
+                {"role": "user", "content": FINAL_ANSWER_PROMPT},
             ]
         )
-        final_response = self.model.chat(messages, tools=definitions)
+        final_response = self.model.chat(messages)
         _log_model_metrics(final_response, "final_answer")
         if final_response.tool_calls:
             raise ValueError("Model requested another tool instead of answering")

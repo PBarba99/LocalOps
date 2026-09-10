@@ -1,6 +1,6 @@
 """Regression tests for the model's safety instructions."""
 
-from localops.prompts import SYSTEM_PROMPT
+from localops.prompts import FINAL_ANSWER_PROMPT, SYSTEM_PROMPT
 
 
 def test_system_prompt_requires_exact_reported_units() -> None:
@@ -20,3 +20,19 @@ def test_system_prompt_requires_read_only_refusal() -> None:
 def test_system_prompt_declines_requests_outside_inspection_tools() -> None:
     assert "cannot be answered using the available read-only server" in SYSTEM_PROMPT
     assert "inspection tools, choose decline_unsupported_request" in SYSTEM_PROMPT
+
+
+def test_system_prompt_defines_bounded_multi_tool_requests() -> None:
+    assert "before receiving tool output" in SYSTEM_PROMPT
+    assert "every relevant\ntool together in the same response" in SYSTEM_PROMPT
+    assert "between one and six tools" in SYSTEM_PROMPT
+    assert "each tool at most once" in SYSTEM_PROMPT
+    assert "exactly an empty argument object\n{}" in SYSTEM_PROMPT
+    assert "Never combine decline_unsupported_request" in SYSTEM_PROMPT
+
+
+def test_final_answer_prompt_requires_concrete_results() -> None:
+    assert "original question" in FINAL_ANSWER_PROMPT
+    assert "every\nrequested category" in FINAL_ANSWER_PROMPT
+    assert "using only the tool outputs" in FINAL_ANSWER_PROMPT
+    assert "Do not merely state" in FINAL_ANSWER_PROMPT

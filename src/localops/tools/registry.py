@@ -34,6 +34,8 @@ class CommandID(str, Enum):
     LOAD_AVERAGE = "load_average"
     RUNNING_SERVICES = "running_services"
     FAILED_SERVICES = "failed_services"
+    NETWORK_INTERFACES = "network_interfaces"
+    DEFAULT_ROUTE = "default_route"
 
 
 # Construct the proxy inline so no mutable backing dictionary is retained.
@@ -55,6 +57,8 @@ COMMAND_ALLOWLIST = MappingProxyType(
             "systemctl list-units --type=service --state=failed "
             "--no-pager --no-legend --plain"
         ),
+        CommandID.NETWORK_INTERFACES: "ip -brief address show",
+        CommandID.DEFAULT_ROUTE: "ip route show default",
     }
 )
 
@@ -76,6 +80,19 @@ class ToolRegistry:
     """Fixed model-visible tools and their strict invocation boundary."""
 
     ssh: SSHClient | None = None
+
+    def validate_invocation(
+        self, name: str, arguments: dict[str, Any]
+    ) -> None:
+        """Validate one fixed action without executing it."""
+
+        available_names = {
+            definition["function"]["name"] for definition in self.definitions()
+        }
+        if not isinstance(name, str) or name not in available_names:
+            raise InvalidToolRequest(f"Unknown tool: {name!r}")
+        if not isinstance(arguments, dict) or arguments:
+            raise InvalidToolRequest(f"Tool {name!r} accepts no arguments")
 
     def definitions(self) -> list[dict[str, Any]]:
         """Return the fixed zero-argument actions visible to the model."""
@@ -100,6 +117,11 @@ class ToolRegistry:
             (
                 "get_service_status",
                 "Get the server's running and failed systemd services.",
+            ),
+            (
+                "get_network_status",
+                "Get the server's network interfaces, assigned addresses, "
+                "and default route.",
             ),
             (
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
@@ -130,6 +152,7 @@ class ToolRegistry:
         from .cpu import get_cpu_load
         from .disk import get_disk_usage
         from .memory import get_memory_usage
+        from .network import get_network_status
         from .services import get_service_status
         from .system import get_system_info
 
@@ -139,19 +162,15 @@ class ToolRegistry:
             "get_disk_usage": get_disk_usage,
             "get_cpu_load": get_cpu_load,
             "get_service_status": get_service_status,
+            "get_network_status": get_network_status,
         }
         control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
-        if not isinstance(name, str) or (
-            name not in tools and name != control_name
-        ):
-            raise InvalidToolRequest(f"Unknown tool: {name!r}")
-        if not isinstance(arguments, dict) or arguments:
-            raise InvalidToolRequest(f"Tool {name!r} accepts no arguments")
+        self.validate_invocation(name, arguments)
         if name == control_name:
             return lookup_control_response(
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST
             )
+
         if self.ssh is None:
             raise RuntimeError("Tool registry has no SSH client")
-
         return tools[name](self.ssh)

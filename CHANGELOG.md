@@ -13,6 +13,16 @@ All notable changes to LocalOps are documented in this file.
 - Added an ASCII CLI banner and explicit model-loading and readiness states.
 - Added prompt-aware Ollama warm-up before the first question, session-long
   model retention, clean unloading on exit, and startup failure handling.
+- Added `get_network_status`, backed by fixed interface-address and default-route
+  commands with no model-controlled arguments.
+- Added bounded multi-tool requests with complete preflight validation,
+  duplicate rejection, a six-call limit, and sequential execution.
+
+### Changed
+
+- Tool selection now uses temperature `0` for more consistent routing.
+- Final-answer requests omit tool schemas and include a concrete synthesis
+  instruction after all selected tool outputs.
 
 ## [0.2.0] - 2026-09-03
 

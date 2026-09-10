@@ -18,22 +18,26 @@ application registry. It accepts no arguments and never reaches the SSH client.
 ## System flow
 
 ```text
-User -> Agent -> Ollama -> one validated action
-                         |-> inspection tool -> approved SSH command -> server
-                         |   -> command result -> Ollama -> grounded answer
+User -> Agent -> Ollama -> validated action batch
+                         |-> inspection tools -> approved SSH commands -> server
+                         |   -> command results -> Ollama -> grounded answer
                          `-> decline unsupported request -> fixed local response
 ```
 
-Ollama sees six zero-argument schemas: five inspection tools and one controlled
-decline action. LocalOps requires exactly one request, validates its exact name
-and empty arguments, and permits one corrective model retry after an invalid
-request. A second invalid request fails closed; SSH, timeout, and remote command
-failures are not retried through the model.
+Ollama sees seven zero-argument schemas: six inspection tools and one controlled
+decline action. LocalOps accepts between one and six distinct requests, validates
+the entire batch before running any command, rejects arguments and mixed decline
+batches, and executes approved inspection tools sequentially. One corrective
+model retry is permitted after an invalid request. A second invalid request
+fails closed; SSH, timeout, and remote command failures are not retried through
+the model.
 
-Inspection results return to Ollama for a grounded final answer. The decline
-action instead returns fixed application-owned text immediately. This path does
-not create an SSH connection and does not ask the model to compose or rewrite
-the refusal.
+Inspection results return to Ollama with an explicit final synthesis instruction
+for a grounded answer. Tool schemas are omitted from this final request, so the
+model cannot request additional structured tool calls after execution. The
+decline action instead returns fixed application-owned text immediately. This
+path does not create an SSH connection and does not ask the model to compose or
+rewrite the refusal.
 
 The recommended model is `llama3.1:8b`, selected through `OLLAMA_MODEL` rather
 than hard-coded into the agent. `qwen3:4b` remains a tested fallback and control
@@ -43,9 +47,11 @@ registries are fixed and validated outside the model.
 The system prompt requires final answers to copy reported quantities and units
 exactly. It routes unsupported questions and every server modification request
 to the controlled decline action, and prohibits claims that a change was or will
-be performed. These instructions improve model selection; strict action
-validation, the immutable response registry, and the command allowlist remain
-the enforcement boundaries.
+be performed. Tool selection uses temperature `0` to reduce routing variance;
+final-answer generation keeps the model's normal generation settings. These
+instructions improve model behavior, while strict batch validation, the
+immutable response registry, and the command allowlist remain the enforcement
+boundaries.
 
 Each tool stops on the first non-zero command exit and raises a diagnostic error
 retaining the command ID, stdout, stderr, and exit code. Structured JSON events

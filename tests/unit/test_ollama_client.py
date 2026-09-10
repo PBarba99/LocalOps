@@ -167,7 +167,11 @@ def test_chat_sends_tools_and_normalizes_requested_tool_calls() -> None:
     with patch.object(
         OllamaClient, "_create_client", return_value=sdk_client
     ):
-        response = OllamaClient(settings).chat(messages, tools=tools)
+        response = OllamaClient(settings).chat(
+            messages,
+            tools=tools,
+            options={"temperature": 0},
+        )
 
     sdk_client.chat.assert_called_once_with(
         model="qwen3:4b",
@@ -175,6 +179,7 @@ def test_chat_sends_tools_and_normalizes_requested_tool_calls() -> None:
         stream=False,
         keep_alive=-1,
         tools=tools,
+        options={"temperature": 0},
     )
     assert response == ModelResponse(
         content="",

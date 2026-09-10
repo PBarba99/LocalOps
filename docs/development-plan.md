@@ -36,5 +36,12 @@ questions, along with repeated attempts to request prohibited write operations.
   prompt, with an honest loading indicator and clear startup failures.
 - [x] Keep the model resident while the CLI session is active and test warm-up,
   readiness, and failure behavior.
-- [ ] Add restricted network interface status inspection.
+- [x] Add restricted network interface and default-route status inspection.
+- [x] Validate and execute bounded multi-tool requests sequentially.
+- [x] Remove tool schemas from final-answer requests and require concrete
+  synthesis from every returned result.
+- [x] Use deterministic sampling for tool selection and validate multi-tool
+  routing against the live server.
 - [ ] Add restricted available-package-update inspection.
+- [ ] Add restricted sensor-temperature inspection after confirming server
+  command support.

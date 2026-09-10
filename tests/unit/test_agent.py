@@ -2,13 +2,13 @@
 
 import json
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from localops.agent import ServerAssistant, ToolExecution
 from localops.ollama_client import ModelMetrics, ModelResponse
-from localops.prompts import SYSTEM_PROMPT
+from localops.prompts import FINAL_ANSWER_PROMPT, SYSTEM_PROMPT
 from localops.request_policy import ControlActionID, lookup_control_response
 from localops.tools.registry import InvalidToolRequest, ToolRegistry
 
@@ -49,6 +49,7 @@ def test_run_requested_tool_selects_and_invokes_one_fixed_tool() -> None:
             {"role": "user", "content": "How much storage is left?"},
         ],
         tools=definitions,
+        options={"temperature": 0},
     )
     tools.invoke.assert_called_once_with("get_disk_usage", {})
     assert execution == ToolExecution(
@@ -57,28 +58,117 @@ def test_run_requested_tool_selects_and_invokes_one_fixed_tool() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "tool_calls",
-    [
-        (),
-        (
-            {"name": "get_memory_usage", "arguments": {}},
-            {"name": "get_disk_usage", "arguments": {}},
-        ),
-    ],
-)
-def test_run_requested_tool_requires_exactly_one_request(
-    tool_calls: tuple[dict[str, object], ...]
-) -> None:
+def test_run_requested_tool_requires_at_least_one_request() -> None:
     model = MagicMock()
     tools = MagicMock()
-    model.chat.return_value = ModelResponse(content="", tool_calls=tool_calls)
+    model.chat.return_value = ModelResponse(content="", tool_calls=())
     assistant = ServerAssistant(model=model, tools=tools)
 
-    with pytest.raises(ValueError, match="exactly one tool"):
+    with pytest.raises(ValueError, match="at least one tool"):
         assistant.run_requested_tool("Inspect the server")
 
     tools.invoke.assert_not_called()
+
+
+def test_execute_tool_batch_accepts_multiple_unique_tools() -> None:
+    ssh = MagicMock()
+    assistant = ServerAssistant(model=MagicMock(), tools=ToolRegistry(ssh=ssh))
+    response = ModelResponse(
+        content="",
+        tool_calls=(
+            {"name": "get_memory_usage", "arguments": {}},
+            {"name": "get_disk_usage", "arguments": {}},
+        ),
+    )
+
+    with (
+        patch(
+            "localops.tools.memory.get_memory_usage",
+            return_value="memory output",
+        ) as memory_tool,
+        patch(
+            "localops.tools.disk.get_disk_usage",
+            return_value="disk output",
+        ) as disk_tool,
+    ):
+        executions = assistant._execute_tool_batch(response)
+
+    assert executions == (
+        ToolExecution(name="get_memory_usage", output="memory output"),
+        ToolExecution(name="get_disk_usage", output="disk output"),
+    )
+    memory_tool.assert_called_once_with(ssh)
+    disk_tool.assert_called_once_with(ssh)
+
+
+@pytest.mark.parametrize(
+    ("tool_calls", "error"),
+    [
+        (
+            (
+                {"name": "get_memory_usage", "arguments": {}},
+                {"name": "get_memory_usage", "arguments": {}},
+            ),
+            "Duplicate tool request",
+        ),
+        (
+            (
+                {"name": "get_memory_usage", "arguments": {}},
+                {"name": "get_disk_usage", "arguments": {"path": "/"}},
+            ),
+            "accepts no arguments",
+        ),
+        (
+            (
+                {"name": "get_memory_usage", "arguments": {}},
+                {"name": "run_command", "arguments": {}},
+            ),
+            "Unknown tool",
+        ),
+        (
+            (
+                {"name": "get_memory_usage", "arguments": {}},
+                {"name": "decline_unsupported_request", "arguments": {}},
+            ),
+            "cannot be combined",
+        ),
+    ],
+)
+def test_execute_tool_batch_rejects_invalid_batch_before_execution(
+    tool_calls: tuple[dict[str, object], ...], error: str
+) -> None:
+    ssh = MagicMock()
+    assistant = ServerAssistant(model=MagicMock(), tools=ToolRegistry(ssh=ssh))
+
+    with patch("localops.tools.memory.get_memory_usage") as memory_tool:
+        with pytest.raises(InvalidToolRequest, match=error):
+            assistant._execute_tool_batch(
+                ModelResponse(content="", tool_calls=tool_calls)
+            )
+
+    memory_tool.assert_not_called()
+
+
+def test_execute_tool_batch_rejects_more_than_six_calls_before_execution() -> None:
+    ssh = MagicMock()
+    assistant = ServerAssistant(model=MagicMock(), tools=ToolRegistry(ssh=ssh))
+    tool_calls = (
+        {"name": "get_system_info", "arguments": {}},
+        {"name": "get_memory_usage", "arguments": {}},
+        {"name": "get_disk_usage", "arguments": {}},
+        {"name": "get_cpu_load", "arguments": {}},
+        {"name": "get_service_status", "arguments": {}},
+        {"name": "get_network_status", "arguments": {}},
+        {"name": "decline_unsupported_request", "arguments": {}},
+    )
+
+    with patch("localops.tools.system.get_system_info") as system_tool:
+        with pytest.raises(InvalidToolRequest, match="at most 6"):
+            assistant._execute_tool_batch(
+                ModelResponse(content="", tool_calls=tool_calls)
+            )
+
+    system_tool.assert_not_called()
 
 
 def test_run_requested_tool_does_not_bypass_registry_validation() -> None:
@@ -138,8 +228,84 @@ def test_answer_sends_tool_output_back_and_returns_final_text() -> None:
             "tool_name": "get_disk_usage",
             "content": "Disk usage:\n/dev/sda2 915G 677G 192G 78% /",
         },
+        {"role": "user", "content": FINAL_ANSWER_PROMPT},
     ]
-    assert model.chat.call_args_list[1].kwargs == {"tools": definitions}
+    assert model.chat.call_args_list[0].kwargs == {
+        "tools": definitions,
+        "options": {"temperature": 0},
+    }
+    assert model.chat.call_args_list[1].kwargs == {}
+
+
+def test_answer_sends_multiple_tool_outputs_in_one_final_request() -> None:
+    model = MagicMock()
+    tools = MagicMock()
+    definitions = [
+        {"type": "function", "function": {"name": "get_memory_usage"}},
+        {"type": "function", "function": {"name": "get_disk_usage"}},
+    ]
+    tools.definitions.return_value = definitions
+    model.chat.side_effect = [
+        ModelResponse(
+            content="",
+            tool_calls=(
+                {"name": "get_memory_usage", "arguments": {}},
+                {"name": "get_disk_usage", "arguments": {}},
+            ),
+        ),
+        ModelResponse(content="Memory and disk both have capacity available."),
+    ]
+    tools.invoke.side_effect = [
+        "Memory usage:\navailable 6.6Gi",
+        "Disk usage:\n/dev/sda2 915G 677G 192G 78% /",
+    ]
+    assistant = ServerAssistant(model=model, tools=tools)
+
+    answer = assistant.answer("Summarize memory and disk capacity")
+
+    assert answer == "Memory and disk both have capacity available."
+    assert [invocation.args for invocation in tools.invoke.call_args_list] == [
+        ("get_memory_usage", {}),
+        ("get_disk_usage", {}),
+    ]
+    assert model.chat.call_args_list[1].args[0] == [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "Summarize memory and disk capacity"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "get_memory_usage",
+                        "arguments": {},
+                    }
+                },
+                {
+                    "function": {
+                        "name": "get_disk_usage",
+                        "arguments": {},
+                    }
+                },
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_name": "get_memory_usage",
+            "content": "Memory usage:\navailable 6.6Gi",
+        },
+        {
+            "role": "tool",
+            "tool_name": "get_disk_usage",
+            "content": "Disk usage:\n/dev/sda2 915G 677G 192G 78% /",
+        },
+        {"role": "user", "content": FINAL_ANSWER_PROMPT},
+    ]
+    assert model.chat.call_args_list[0].kwargs == {
+        "tools": definitions,
+        "options": {"temperature": 0},
+    }
+    assert model.chat.call_args_list[1].kwargs == {}
 
 
 def test_answer_returns_fixed_decline_without_ssh_or_second_model_call() -> None:

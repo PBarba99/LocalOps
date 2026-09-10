@@ -8,7 +8,7 @@ from localops.request_policy import ControlActionID, lookup_control_response
 from localops.tools.registry import ToolRegistry
 
 
-def test_definitions_expose_only_six_zero_argument_actions() -> None:
+def test_definitions_expose_only_seven_zero_argument_actions() -> None:
     definitions = ToolRegistry().definitions()
 
     assert [definition["function"]["name"] for definition in definitions] == [
@@ -17,6 +17,7 @@ def test_definitions_expose_only_six_zero_argument_actions() -> None:
         "get_disk_usage",
         "get_cpu_load",
         "get_service_status",
+        "get_network_status",
         "decline_unsupported_request",
     ]
     for definition in definitions:
@@ -47,6 +48,7 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
         "get_disk_usage",
         "get_cpu_load",
         "get_service_status",
+        "get_network_status",
         "decline_unsupported_request",
     ]
 
@@ -63,6 +65,12 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
             "services",
             "get_service_status",
             "service output",
+        ),
+        (
+            "get_network_status",
+            "network",
+            "get_network_status",
+            "network output",
         ),
     ],
 )

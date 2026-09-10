@@ -79,6 +79,7 @@ class OllamaClient:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> ModelResponse:
         """Send a non-streaming chat request and normalize requested tools."""
 
@@ -90,6 +91,8 @@ class OllamaClient:
         }
         if tools is not None:
             request["tools"] = tools
+        if options is not None:
+            request["options"] = options
 
         response = self._create_client().chat(**request)
         tool_calls = tuple(

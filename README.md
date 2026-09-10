@@ -6,7 +6,7 @@ LocalOps is a local AI assistant for inspecting a Linux home server. The
 application runs on Windows, uses Llama 3.1 8B through Ollama, and retrieves
 live server information over SSH through predefined read-only tools.
 
-The configuration, restricted SSH boundary, five read-only inspection tools,
+The configuration, restricted SSH boundary, six read-only inspection tools,
 Ollama tool calling, and agent loop are implemented. LocalOps can answer a
 natural-language question using live server data selected through a fixed,
 immutable allowlist. Unsupported requests are declined with fixed
@@ -19,10 +19,11 @@ Prove this end-to-end flow:
 
 ```text
 User question
-  -> local model selects a predefined tool
-  -> Python runs a fixed read-only command over SSH
-  -> real server output returns to the model
-  -> model answers from that output
+  -> local model selects one or more predefined tools
+  -> Python validates the complete request batch
+  -> Python runs fixed read-only commands sequentially over SSH
+  -> real server outputs return to the model
+  -> model answers from those outputs without access to more tools
 ```
 
 Inspection tools:
@@ -32,6 +33,7 @@ Inspection tools:
 - `get_disk_usage()`
 - `get_cpu_load()`
 - `get_service_status()`
+- `get_network_status()`
 
 The model will not receive arbitrary shell access.
 
@@ -91,7 +93,9 @@ OLLAMA_MODEL=qwen3:4b
 Llama 3.1 8B was selected after isolated and live CLI tests showed valid tool
 selection, concise answers, no visible reasoning output, and substantially
 lower response latency. The system prompt explicitly requires exact reported
-units and refusal of all server modifications.
+units and refusal of all server modifications. Tool selection uses temperature
+`0` for consistent routing; final-answer generation retains the model's normal
+generation settings.
 
 ## Interactive CLI
 
@@ -119,6 +123,7 @@ Ask natural-language questions such as:
 You: How much storage is left on the server?
 You: How much memory is currently available?
 You: What operating system is the server running?
+You: Summarize the server's CPU load, memory, disk space, and network status.
 ```
 
 Questions outside the available server inspection tools, such as a weather
@@ -139,29 +144,33 @@ configuration, and private-key paths.
 - Environment configuration is loaded, validated, and immutable.
 - The CLI preloads and primes Ollama before accepting a question, keeps the
   model resident during the session, and unloads it during clean shutdown.
-- Six reviewed read-only commands are represented by `CommandID` and stored in
+- Twelve reviewed read-only commands are represented by `CommandID` and stored in
   an immutable allowlist.
 - The SSH client rejects raw command text, uses the configured private key, and
   returns stdout, stderr, and the remote exit code. Connection and command waits
   have bounded timeouts.
-- System, memory, disk, CPU-load, and service-status tools execute only their
-  assigned `CommandID` values. They fail immediately on a non-zero exit while
-  preserving stdout and stderr for diagnosis.
+- System, memory, disk, CPU-load, service-status, and network-status tools
+  execute only their assigned `CommandID` values. They fail immediately on a
+  non-zero exit while preserving stdout and stderr for diagnosis.
 - Unit tests cover command injection, connection failures, execution failures,
   command timeouts, non-zero exits, tool failure behavior, and cleanup.
-- All five inspection tools have passed live smoke tests against the target
+- All six inspection tools have passed live smoke tests against the target
   server.
-- Ollama receives six zero-argument action schemas: five inspection tools and
-  `decline_unsupported_request`. Model requests are strictly validated before
-  invocation, and one corrective retry is allowed for an invalid request.
-- The agent returns tool output to Ollama for a grounded final answer. Structured
-  JSON logs record tool selection and outcomes without questions, command
-  output, SSH settings, or private-key paths.
+- Ollama receives seven zero-argument action schemas: six inspection tools and
+  `decline_unsupported_request`. The agent accepts at most six distinct calls,
+  validates the complete batch before execution, and runs approved inspection
+  tools sequentially. One corrective retry is allowed for an invalid request.
+- Tool selection uses temperature `0`. After execution, the agent returns every
+  tool output to Ollama with an explicit synthesis instruction and no tool
+  schemas, so the final phase can only produce an answer. Structured JSON logs
+  record tool selection and outcomes without questions, command output, SSH
+  settings, or private-key paths.
 - The model instructions require quantities and units to be copied exactly from
   tool output. Unsupported questions and requests to modify the server select an
   immutable application response without SSH or a second model call.
 - The full question-to-answer flow has been verified live with system, memory,
-  disk, CPU-load, and systemd service questions.
+  disk, CPU-load, systemd service, and network questions, including combined
+  requests that select several tools.
 - The interactive CLI constructs the complete application, accepts repeated
   questions, reports expected failures without a traceback, and exits cleanly.
 - Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,
