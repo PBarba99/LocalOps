@@ -26,6 +26,12 @@ EXPECTED_COMMANDS = {
     ),
     CommandID.NETWORK_INTERFACES: "ip -brief address show",
     CommandID.DEFAULT_ROUTE: "ip route show default",
+    CommandID.AVAILABLE_UPDATES: "LC_ALL=C apt list --upgradable",
+    CommandID.APT_REFRESH_TIMESTAMP: (
+        "if [ -f /var/lib/apt/periodic/update-stamp ]; then "
+        "stat -c '%y' /var/lib/apt/periodic/update-stamp; "
+        "else printf '%s\\n' 'Unknown (APT periodic refresh stamp missing)'; fi"
+    ),
 }
 
 
@@ -42,14 +48,17 @@ def test_lookup_returns_only_fixed_commands(
     assert lookup_command(command_id) == command
 
 
-def test_allowlist_entries_cannot_be_replaced_or_deleted() -> None:
+@pytest.mark.parametrize("command_id", EXPECTED_COMMANDS)
+def test_allowlist_entries_cannot_be_replaced_or_deleted(
+    command_id: CommandID,
+) -> None:
     with pytest.raises(TypeError):
-        COMMAND_ALLOWLIST[CommandID.HOSTNAME] = "hostname; id"  # type: ignore[index]
+        COMMAND_ALLOWLIST[command_id] = "hostname; id"  # type: ignore[index]
 
     with pytest.raises(TypeError):
-        del COMMAND_ALLOWLIST[CommandID.HOSTNAME]  # type: ignore[attr-defined]
+        del COMMAND_ALLOWLIST[command_id]  # type: ignore[attr-defined]
 
-    assert lookup_command(CommandID.HOSTNAME) == "hostname"
+    assert lookup_command(command_id) == EXPECTED_COMMANDS[command_id]
 
 
 @pytest.mark.parametrize(
@@ -60,6 +69,8 @@ def test_allowlist_entries_cannot_be_replaced_or_deleted() -> None:
         "hostname; id",
         "$(id)",
         "disk_usage && whoami",
+        "available_updates; apt upgrade",
+        "apt_refresh_timestamp && apt update",
         "",
         None,
     ],

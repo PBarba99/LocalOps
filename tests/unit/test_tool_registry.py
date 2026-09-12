@@ -8,7 +8,7 @@ from localops.request_policy import ControlActionID, lookup_control_response
 from localops.tools.registry import ToolRegistry
 
 
-def test_definitions_expose_only_seven_zero_argument_actions() -> None:
+def test_definitions_expose_only_eight_zero_argument_actions() -> None:
     definitions = ToolRegistry().definitions()
 
     assert [definition["function"]["name"] for definition in definitions] == [
@@ -18,6 +18,7 @@ def test_definitions_expose_only_seven_zero_argument_actions() -> None:
         "get_cpu_load",
         "get_service_status",
         "get_network_status",
+        "get_package_updates",
         "decline_unsupported_request",
     ]
     for definition in definitions:
@@ -49,6 +50,7 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
         "get_cpu_load",
         "get_service_status",
         "get_network_status",
+        "get_package_updates",
         "decline_unsupported_request",
     ]
 
@@ -72,6 +74,12 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
             "get_network_status",
             "network output",
         ),
+        (
+            "get_package_updates",
+            "updates",
+            "get_package_updates",
+            "package updates output",
+        ),
     ],
 )
 def test_invoke_routes_only_fixed_tool_names(
@@ -91,7 +99,14 @@ def test_invoke_routes_only_fixed_tool_names(
 
 @pytest.mark.parametrize(
     "unknown_name",
-    ["run_command", "get_disk_usage; whoami", "GET_SYSTEM_INFO", "", None],
+    [
+        "run_command",
+        "get_disk_usage; whoami",
+        "get_package_updates; apt upgrade",
+        "GET_SYSTEM_INFO",
+        "",
+        None,
+    ],
 )
 def test_invoke_rejects_unknown_and_injected_names(unknown_name: object) -> None:
     ssh = MagicMock()
@@ -103,18 +118,19 @@ def test_invoke_rejects_unknown_and_injected_names(unknown_name: object) -> None
     ssh.assert_not_called()
 
 
+@pytest.mark.parametrize("tool_name", ["get_disk_usage", "get_package_updates"])
 @pytest.mark.parametrize(
     "arguments",
     [{"command": "whoami"}, {"path": "/"}, {"unexpected": True}, None, []],
 )
-def test_invoke_rejects_all_arguments(arguments: object) -> None:
+def test_invoke_rejects_all_arguments(tool_name: str, arguments: object) -> None:
     ssh = MagicMock()
     registry = ToolRegistry(ssh=ssh)
 
     with pytest.raises(ValueError, match="accepts no arguments"):
-        registry.invoke("get_disk_usage", arguments)  # type: ignore[arg-type]
+        registry.invoke(tool_name, arguments)  # type: ignore[arg-type]
 
-    ssh.assert_not_called()
+    ssh.run_approved_command.assert_not_called()
 
 
 def test_invoke_requires_an_ssh_client() -> None:

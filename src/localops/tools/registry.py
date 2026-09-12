@@ -36,6 +36,8 @@ class CommandID(str, Enum):
     FAILED_SERVICES = "failed_services"
     NETWORK_INTERFACES = "network_interfaces"
     DEFAULT_ROUTE = "default_route"
+    AVAILABLE_UPDATES = "available_updates"
+    APT_REFRESH_TIMESTAMP = "apt_refresh_timestamp"
 
 
 # Construct the proxy inline so no mutable backing dictionary is retained.
@@ -59,6 +61,12 @@ COMMAND_ALLOWLIST = MappingProxyType(
         ),
         CommandID.NETWORK_INTERFACES: "ip -brief address show",
         CommandID.DEFAULT_ROUTE: "ip route show default",
+        CommandID.AVAILABLE_UPDATES: "LC_ALL=C apt list --upgradable",
+        CommandID.APT_REFRESH_TIMESTAMP: (
+            "if [ -f /var/lib/apt/periodic/update-stamp ]; then "
+            "stat -c '%y' /var/lib/apt/periodic/update-stamp; "
+            "else printf '%s\\n' 'Unknown (APT periodic refresh stamp missing)'; fi"
+        ),
     }
 )
 
@@ -124,6 +132,12 @@ class ToolRegistry:
                 "and default route.",
             ),
             (
+                "get_package_updates",
+                "List available package upgrades from cached APT metadata and "
+                "the last recorded periodic refresh. Does not refresh metadata "
+                "or install updates.",
+            ),
+            (
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
                 "Decline a request that cannot be answered using the available "
                 "read-only server inspection tools.",
@@ -155,6 +169,7 @@ class ToolRegistry:
         from .network import get_network_status
         from .services import get_service_status
         from .system import get_system_info
+        from .updates import get_package_updates
 
         tools = {
             "get_system_info": get_system_info,
@@ -163,6 +178,7 @@ class ToolRegistry:
             "get_cpu_load": get_cpu_load,
             "get_service_status": get_service_status,
             "get_network_status": get_network_status,
+            "get_package_updates": get_package_updates,
         }
         control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
         self.validate_invocation(name, arguments)

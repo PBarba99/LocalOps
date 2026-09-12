@@ -24,13 +24,20 @@ User -> Agent -> Ollama -> validated action batch
                          `-> decline unsupported request -> fixed local response
 ```
 
-Ollama sees seven zero-argument schemas: six inspection tools and one controlled
+Ollama sees eight zero-argument schemas: seven inspection tools and one controlled
 decline action. LocalOps accepts between one and six distinct requests, validates
 the entire batch before running any command, rejects arguments and mixed decline
 batches, and executes approved inspection tools sequentially. One corrective
 model retry is permitted after an invalid request. A second invalid request
 fails closed; SSH, timeout, and remote command failures are not retried through
 the model.
+
+Package-update inspection uses two fixed commands: a cached APT upgrade listing
+and a read of `/var/lib/apt/periodic/update-stamp`. A missing stamp is reported
+as "Unknown". The tool never refreshes metadata or installs packages. Its output
+explicitly warns that the recorded periodic refresh does not guarantee all
+repositories are current. Package-update selection and a combined update/disk
+question have been validated against the live server.
 
 Inspection results return to Ollama with an explicit final synthesis instruction
 for a grounded answer. Tool schemas are omitted from this final request, so the

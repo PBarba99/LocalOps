@@ -42,6 +42,9 @@ questions, along with repeated attempts to request prohibited write operations.
   synthesis from every returned result.
 - [x] Use deterministic sampling for tool selection and validate multi-tool
   routing against the live server.
-- [ ] Add restricted available-package-update inspection.
+- [x] Add restricted available-package-update inspection using cached APT
+  metadata, with the last recorded periodic refresh and missing-stamp handling.
+- [x] Verify package-update selection and combined update/disk questions in the
+  live CLI without refreshing metadata or installing packages.
 - [ ] Add restricted sensor-temperature inspection after confirming server
   command support.

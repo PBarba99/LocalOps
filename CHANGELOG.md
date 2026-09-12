@@ -17,6 +17,9 @@ All notable changes to LocalOps are documented in this file.
   commands with no model-controlled arguments.
 - Added bounded multi-tool requests with complete preflight validation,
   duplicate rejection, a six-call limit, and sequential execution.
+- Added `get_package_updates` to report upgrades from cached APT metadata and
+  the last recorded periodic refresh, with missing-stamp handling and explicit
+  freshness caveats. It does not refresh metadata or install packages.
 
 ### Changed
 

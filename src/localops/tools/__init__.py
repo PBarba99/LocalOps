@@ -7,6 +7,7 @@ from .memory import get_memory_usage
 from .network import get_network_status
 from .services import get_service_status
 from .system import get_system_info
+from .updates import get_package_updates
 
 __all__ = [
     "ToolCommandError",
@@ -14,6 +15,7 @@ __all__ = [
     "get_disk_usage",
     "get_memory_usage",
     "get_network_status",
+    "get_package_updates",
     "get_service_status",
     "get_system_info",
 ]
