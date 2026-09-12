@@ -20,6 +20,9 @@ All notable changes to LocalOps are documented in this file.
 - Added `get_package_updates` to report upgrades from cached APT metadata and
   the last recorded periodic refresh, with missing-stamp handling and explicit
   freshness caveats. It does not refresh metadata or install packages.
+- Added `get_temperature_readings`, backed by a fixed kernel thermal-zone query,
+  with exact Celsius conversion, preserved zone labels, and handling for absent,
+  unavailable, or malformed readings. It does not change thermal settings.
 
 ### Changed
 

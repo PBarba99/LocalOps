@@ -38,6 +38,7 @@ class CommandID(str, Enum):
     DEFAULT_ROUTE = "default_route"
     AVAILABLE_UPDATES = "available_updates"
     APT_REFRESH_TIMESTAMP = "apt_refresh_timestamp"
+    THERMAL_READINGS = "thermal_readings"
 
 
 # Construct the proxy inline so no mutable backing dictionary is retained.
@@ -66,6 +67,18 @@ COMMAND_ALLOWLIST = MappingProxyType(
             "if [ -f /var/lib/apt/periodic/update-stamp ]; then "
             "stat -c '%y' /var/lib/apt/periodic/update-stamp; "
             "else printf '%s\\n' 'Unknown (APT periodic refresh stamp missing)'; fi"
+        ),
+        # Tab-separated zone ID, kernel type, and raw millidegrees Celsius.
+        # Missing/unreadable readings remain visible without failing other zones.
+        CommandID.THERMAL_READINGS: (
+            "for thermal_zone in /sys/class/thermal/thermal_zone*; do "
+            '[ -d "$thermal_zone" ] || continue; '
+            'thermal_type=$(cat "$thermal_zone/type" 2>/dev/null) '
+            "|| thermal_type=Unknown; "
+            'thermal_temp=$(cat "$thermal_zone/temp" 2>/dev/null) '
+            "|| thermal_temp=Unavailable; "
+            "printf '%s\\t%s\\t%s\\n' "
+            '"${thermal_zone##*/}" "$thermal_type" "$thermal_temp"; done'
         ),
     }
 )
@@ -138,6 +151,12 @@ class ToolRegistry:
                 "or install updates.",
             ),
             (
+                "get_temperature_readings",
+                "Get kernel thermal-zone temperatures in Celsius, including "
+                "CPU package readings when available. Preserve zone labels "
+                "and unavailable readings; do not infer hardware health.",
+            ),
+            (
                 ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value,
                 "Decline a request that cannot be answered using the available "
                 "read-only server inspection tools.",
@@ -169,6 +188,7 @@ class ToolRegistry:
         from .network import get_network_status
         from .services import get_service_status
         from .system import get_system_info
+        from .temperature import get_temperature_readings
         from .updates import get_package_updates
 
         tools = {
@@ -179,6 +199,7 @@ class ToolRegistry:
             "get_service_status": get_service_status,
             "get_network_status": get_network_status,
             "get_package_updates": get_package_updates,
+            "get_temperature_readings": get_temperature_readings,
         }
         control_name = ControlActionID.DECLINE_UNSUPPORTED_REQUEST.value
         self.validate_invocation(name, arguments)

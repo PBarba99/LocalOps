@@ -8,7 +8,7 @@ from localops.request_policy import ControlActionID, lookup_control_response
 from localops.tools.registry import ToolRegistry
 
 
-def test_definitions_expose_only_eight_zero_argument_actions() -> None:
+def test_definitions_expose_only_nine_zero_argument_actions() -> None:
     definitions = ToolRegistry().definitions()
 
     assert [definition["function"]["name"] for definition in definitions] == [
@@ -19,6 +19,7 @@ def test_definitions_expose_only_eight_zero_argument_actions() -> None:
         "get_service_status",
         "get_network_status",
         "get_package_updates",
+        "get_temperature_readings",
         "decline_unsupported_request",
     ]
     for definition in definitions:
@@ -51,6 +52,7 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
         "get_service_status",
         "get_network_status",
         "get_package_updates",
+        "get_temperature_readings",
         "decline_unsupported_request",
     ]
 
@@ -80,6 +82,12 @@ def test_mutating_returned_definitions_does_not_change_registry() -> None:
             "get_package_updates",
             "package updates output",
         ),
+        (
+            "get_temperature_readings",
+            "temperature",
+            "get_temperature_readings",
+            "temperature output",
+        ),
     ],
 )
 def test_invoke_routes_only_fixed_tool_names(
@@ -103,6 +111,7 @@ def test_invoke_routes_only_fixed_tool_names(
         "run_command",
         "get_disk_usage; whoami",
         "get_package_updates; apt upgrade",
+        "get_temperature_readings; reboot",
         "GET_SYSTEM_INFO",
         "",
         None,
@@ -118,7 +127,10 @@ def test_invoke_rejects_unknown_and_injected_names(unknown_name: object) -> None
     ssh.assert_not_called()
 
 
-@pytest.mark.parametrize("tool_name", ["get_disk_usage", "get_package_updates"])
+@pytest.mark.parametrize(
+    "tool_name",
+    ["get_disk_usage", "get_package_updates", "get_temperature_readings"],
+)
 @pytest.mark.parametrize(
     "arguments",
     [{"command": "whoami"}, {"path": "/"}, {"unexpected": True}, None, []],

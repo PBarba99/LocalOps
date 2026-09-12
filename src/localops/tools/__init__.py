@@ -7,6 +7,7 @@ from .memory import get_memory_usage
 from .network import get_network_status
 from .services import get_service_status
 from .system import get_system_info
+from .temperature import get_temperature_readings
 from .updates import get_package_updates
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "get_package_updates",
     "get_service_status",
     "get_system_info",
+    "get_temperature_readings",
 ]

@@ -32,6 +32,16 @@ EXPECTED_COMMANDS = {
         "stat -c '%y' /var/lib/apt/periodic/update-stamp; "
         "else printf '%s\\n' 'Unknown (APT periodic refresh stamp missing)'; fi"
     ),
+    CommandID.THERMAL_READINGS: (
+        "for thermal_zone in /sys/class/thermal/thermal_zone*; do "
+        '[ -d "$thermal_zone" ] || continue; '
+        'thermal_type=$(cat "$thermal_zone/type" 2>/dev/null) '
+        "|| thermal_type=Unknown; "
+        'thermal_temp=$(cat "$thermal_zone/temp" 2>/dev/null) '
+        "|| thermal_temp=Unavailable; "
+        "printf '%s\\t%s\\t%s\\n' "
+        '"${thermal_zone##*/}" "$thermal_type" "$thermal_temp"; done'
+    ),
 }
 
 
@@ -71,6 +81,7 @@ def test_allowlist_entries_cannot_be_replaced_or_deleted(
         "disk_usage && whoami",
         "available_updates; apt upgrade",
         "apt_refresh_timestamp && apt update",
+        "thermal_readings; reboot",
         "",
         None,
     ],

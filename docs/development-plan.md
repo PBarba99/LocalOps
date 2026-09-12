@@ -46,5 +46,8 @@ questions, along with repeated attempts to request prohibited write operations.
   metadata, with the last recorded periodic refresh and missing-stamp handling.
 - [x] Verify package-update selection and combined update/disk questions in the
   live CLI without refreshing metadata or installing packages.
-- [ ] Add restricted sensor-temperature inspection after confirming server
-  command support.
+- [x] Add restricted kernel thermal-zone inspection after confirming readable
+  server interfaces, with exact Celsius conversion and unavailable-reading
+  handling.
+- [x] Verify thermal-zone selection, unavailable readings, and combined
+  temperature/CPU-load questions in the live CLI.

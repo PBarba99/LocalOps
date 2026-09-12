@@ -6,7 +6,7 @@ LocalOps is a local AI assistant for inspecting a Linux home server. The
 application runs on Windows, uses Llama 3.1 8B through Ollama, and retrieves
 live server information over SSH through predefined read-only tools.
 
-The configuration, restricted SSH boundary, seven read-only inspection tools,
+The configuration, restricted SSH boundary, eight read-only inspection tools,
 Ollama tool calling, and agent loop are implemented. LocalOps can answer a
 natural-language question using live server data selected through a fixed,
 immutable allowlist. Unsupported requests are declined with fixed
@@ -35,12 +35,20 @@ Inspection tools:
 - `get_service_status()`
 - `get_network_status()`
 - `get_package_updates()`
+- `get_temperature_readings()`
 
 Package-update inspection reads cached APT metadata without refreshing it or
 installing packages. It reports the last recorded periodic APT refresh, or
 "Unknown" if the refresh stamp is missing. This timestamp is a freshness hint,
 not a guarantee that every repository is current; stale metadata can miss new
 updates.
+
+Temperature inspection reads kernel thermal zones under `/sys/class/thermal/`
+without requiring `lm-sensors` or changing thermal settings. Python converts
+integer millidegrees to Celsius exactly and preserves kernel zone labels.
+Unavailable or malformed readings remain visible without discarding valid
+readings. These zones may not cover every component, and their readings are not
+a hardware-health assessment.
 
 The model will not receive arbitrary shell access.
 
@@ -132,6 +140,7 @@ You: How much memory is currently available?
 You: What operating system is the server running?
 You: Summarize the server's CPU load, memory, disk space, and network status.
 You: Are package updates available, and when was the metadata last refreshed?
+You: What is the CPU package temperature, and what is the current CPU load?
 ```
 
 Questions outside the available server inspection tools, such as a weather
@@ -152,19 +161,20 @@ configuration, and private-key paths.
 - Environment configuration is loaded, validated, and immutable.
 - The CLI preloads and primes Ollama before accepting a question, keeps the
   model resident during the session, and unloads it during clean shutdown.
-- Fourteen reviewed read-only commands are represented by `CommandID` and stored in
+- Fifteen reviewed read-only commands are represented by `CommandID` and stored in
   an immutable allowlist.
 - The SSH client rejects raw command text, uses the configured private key, and
   returns stdout, stderr, and the remote exit code. Connection and command waits
   have bounded timeouts.
-- System, memory, disk, CPU-load, service-status, network-status, and package-update
-  tools execute only their assigned `CommandID` values. They fail immediately on
-  a non-zero exit while preserving stdout and stderr for diagnosis.
+- System, memory, disk, CPU-load, service-status, network-status, package-update,
+  and temperature tools execute only their assigned `CommandID` values. They
+  fail immediately on a non-zero command exit while preserving stdout and stderr
+  for diagnosis. Individual unavailable thermal readings do not fail the report.
 - Unit tests cover command injection, connection failures, execution failures,
   command timeouts, non-zero exits, tool failure behavior, and cleanup.
-- All seven inspection tools have passed live smoke tests against the target
+- All eight inspection tools have passed live smoke tests against the target
   server.
-- Ollama receives eight zero-argument action schemas: seven inspection tools and
+- Ollama receives nine zero-argument action schemas: eight inspection tools and
   `decline_unsupported_request`. The agent accepts at most six distinct calls,
   validates the complete batch before execution, and runs approved inspection
   tools sequentially. One corrective retry is allowed for an invalid request.
@@ -177,9 +187,9 @@ configuration, and private-key paths.
   tool output. Unsupported questions and requests to modify the server select an
   immutable application response without SSH or a second model call.
 - The full question-to-answer flow has been verified live with system, memory,
-  disk, CPU-load, systemd service, network, and package-update questions,
+  disk, CPU-load, systemd service, network, package-update, and temperature questions,
   including combined requests that select several tools. The per-question limit
-  remains six calls, even though seven inspection tools are available.
+  remains six calls, even though eight inspection tools are available.
 - The interactive CLI constructs the complete application, accepts repeated
   questions, reports expected failures without a traceback, and exits cleanly.
 - Llama 3.1 8B has passed live CLI checks for tool selection, grounded answers,

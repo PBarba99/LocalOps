@@ -24,7 +24,7 @@ User -> Agent -> Ollama -> validated action batch
                          `-> decline unsupported request -> fixed local response
 ```
 
-Ollama sees eight zero-argument schemas: seven inspection tools and one controlled
+Ollama sees nine zero-argument schemas: eight inspection tools and one controlled
 decline action. LocalOps accepts between one and six distinct requests, validates
 the entire batch before running any command, rejects arguments and mixed decline
 batches, and executes approved inspection tools sequentially. One corrective
@@ -37,6 +37,16 @@ and a read of `/var/lib/apt/periodic/update-stamp`. A missing stamp is reported
 as "Unknown". The tool never refreshes metadata or installs packages. Its output
 explicitly warns that the recorded periodic refresh does not guarantee all
 repositories are current. Package-update selection and a combined update/disk
+question have been validated against the live server.
+
+Temperature inspection uses one fixed command to read thermal-zone IDs, kernel
+types, and integer millidegree readings under `/sys/class/thermal/`. Failed
+per-zone reads are labeled unavailable; an absent zone set produces an explicit
+empty report. Python converts valid readings to Celsius using integer arithmetic
+without rounding and labels malformed records without losing valid readings.
+Kernel labels are preserved rather than mapped to guessed components. The tool
+does not require `lm-sensors`, modify thermal settings, or assess hardware health.
+Thermal-zone selection, unavailable readings, and a combined temperature/CPU-load
 question have been validated against the live server.
 
 Inspection results return to Ollama with an explicit final synthesis instruction
