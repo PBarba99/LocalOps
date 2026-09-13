@@ -287,3 +287,79 @@ def test_run_times_out_when_command_never_finishes() -> None:
 
     channel.close.assert_called_once_with()
     client.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_run_enforces_deadline_while_output_is_continuously_ready(
+    stream: str,
+) -> None:
+    ssh = SSHClient(
+        settings=Settings(
+            server_host="test-server",
+            server_username="localops",
+            server_ssh_key=Path("test_key"),
+            _env_file=None,
+        ),
+        command_timeout=2,
+    )
+    channel = MagicMock()
+    channel.recv_ready.return_value = stream == "stdout"
+    channel.recv_stderr_ready.return_value = stream == "stderr"
+    channel.exit_status_ready.return_value = False
+    elapsed = [0]
+
+    def receive(_: int) -> bytes:
+        if elapsed[0] >= 2:
+            pytest.fail("Output draining continued beyond the deadline")
+        elapsed[0] += 1
+        return b"continuous output\n"
+
+    receiver = channel.recv if stream == "stdout" else channel.recv_stderr
+    receiver.side_effect = receive
+    with (
+        patch.object(SSHClient, "_create_paramiko_client") as create_client,
+        patch("localops.ssh_client.monotonic", side_effect=lambda: elapsed[0]),
+        patch("localops.ssh_client.sleep") as sleep,
+    ):
+        client = create_client.return_value
+        client.exec_command.return_value = (
+            MagicMock(), MagicMock(channel=channel), MagicMock()
+        )
+
+        with pytest.raises(TimeoutError, match="exceeded 2 seconds"):
+            ssh.run_approved_command(CommandID.HOSTNAME)
+
+    assert receiver.call_count == 2
+    channel.recv_exit_status.assert_not_called()
+    channel.close.assert_called_once_with()
+    client.close.assert_called_once_with()
+    sleep.assert_not_called()
+
+
+def test_collect_result_checks_deadline_after_the_last_output_chunk() -> None:
+    ssh = SSHClient(
+        settings=Settings(
+            server_host="test-server",
+            server_username="localops",
+            server_ssh_key=Path("test_key"),
+            _env_file=None,
+        ),
+        command_timeout=2,
+    )
+    channel = MagicMock()
+    channel.recv_ready.side_effect = [True, False]
+    channel.recv_stderr_ready.return_value = False
+    channel.exit_status_ready.return_value = True
+    elapsed = [0]
+
+    def receive(_: int) -> bytes:
+        elapsed[0] = 3
+        return b"late output\n"
+
+    channel.recv.side_effect = receive
+    with patch("localops.ssh_client.monotonic", side_effect=lambda: elapsed[0]):
+        with pytest.raises(TimeoutError, match="exceeded 2 seconds"):
+            ssh._collect_result(channel)
+
+    channel.recv_exit_status.assert_not_called()
+    channel.close.assert_called_once_with()

@@ -82,6 +82,18 @@ accepted automatically.
 Ollama must be running and the configured model must already be installed. The
 VPN or local network route required to reach the server must also be active.
 
+Ollama requests use a positive, finite SDK network timeout of 120 seconds by
+default. Configure it in `.env`, increasing the value for slower CPU inference:
+
+```dotenv
+OLLAMA_TIMEOUT_SECONDS=120
+```
+
+This applies to loading, answering, and unload requests. It limits network
+operations and periods of inactivity, not the total duration of a question
+across model requests and SSH commands. Existing `.env` files do not need the
+setting unless overriding the default.
+
 From PowerShell:
 
 ```powershell
@@ -129,8 +141,8 @@ Alternatively:
 At startup, the CLI displays an ASCII banner and a model-loading status. It
 loads the configured model and primes the stable system prompt and action
 schemas before displaying the first `You:` prompt. The model remains resident
-for the CLI session and is unloaded on exit. If warm-up fails, LocalOps reports
-the problem without entering an unusable question loop.
+for the CLI session and an unload is attempted on exit. If warm-up fails,
+LocalOps reports the problem without entering an unusable question loop.
 
 Ask natural-language questions such as:
 
@@ -152,6 +164,12 @@ Enter `exit` or `quit` to stop. Expected connection, model, command, and tool
 validation failures are displayed concisely and return to the prompt. `Ctrl+C`
 and end-of-input exit cleanly.
 
+Empty final answers or unexpected final tool calls also produce a concise error
+without closing the CLI. You can ask again; LocalOps does not automatically
+repeat completed commands. Ollama timeouts during loading stop before input,
+answer timeouts return to the prompt, and unload timeouts are ignored during
+best-effort shutdown.
+
 Structured tool events are written to `.localops/localops.log` at the configured
 `LOG_LEVEL`. Logs rotate locally and exclude user questions, server output, SSH
 configuration, and private-key paths.
@@ -160,12 +178,15 @@ configuration, and private-key paths.
 
 - Environment configuration is loaded, validated, and immutable.
 - The CLI preloads and primes Ollama before accepting a question, keeps the
-  model resident during the session, and unloads it during clean shutdown.
+  model resident during the session, and attempts to unload it during shutdown.
 - Fifteen reviewed read-only commands are represented by `CommandID` and stored in
   an immutable allowlist.
 - The SSH client rejects raw command text, uses the configured private key, and
   returns stdout, stderr, and the remote exit code. Connection and command waits
   have bounded timeouts.
+- The command-output collection deadline is enforced even while stdout or
+  stderr remains continuously ready. Ollama requests use the configurable
+  `OLLAMA_TIMEOUT_SECONDS` SDK network timeout.
 - System, memory, disk, CPU-load, service-status, network-status, package-update,
   and temperature tools execute only their assigned `CommandID` values. They
   fail immediately on a non-zero command exit while preserving stdout and stderr

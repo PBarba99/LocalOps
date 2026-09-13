@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_CALLS = 6
 
 
+class InvalidFinalResponse(ValueError):
+    """The model failed to return a usable text-only final answer."""
+
+
 def _log_tool_event(event: str, **fields: Any) -> None:
     """Emit a machine-readable event without command output or configuration."""
 
@@ -258,7 +262,9 @@ class ServerAssistant:
         final_response = self.model.chat(messages)
         _log_model_metrics(final_response, "final_answer")
         if final_response.tool_calls:
-            raise ValueError("Model requested another tool instead of answering")
+            raise InvalidFinalResponse(
+                "Model requested another tool instead of answering"
+            )
         if not final_response.content.strip():
-            raise ValueError("Model returned an empty final answer")
+            raise InvalidFinalResponse("Model returned an empty final answer")
         return final_response.content

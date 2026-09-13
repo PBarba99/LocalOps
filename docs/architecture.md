@@ -77,6 +77,17 @@ non-sensitive Ollama timing and token metrics. They exclude user questions,
 model answers, tool output, SSH configuration, and exception messages from
 operational failures.
 
+SSH command-output collection checks its monotonic deadline between reads of
+both stdout and stderr and before accepting completion. Continuous output can
+therefore no longer prevent deadline enforcement. Expiry closes the channel,
+raises the existing timeout error, and still closes the SSH client.
+
+Every Ollama SDK client receives `OLLAMA_TIMEOUT_SECONDS`, a positive, finite
+network timeout defaulting to 120 seconds. It covers warm-up, chat, and unload
+requests. This is a network-operation/inactivity timeout rather than a total
+wall-clock deadline across an entire question. HTTP timeout exceptions receive
+separate CLI handling so they are not confused with SSH timeouts.
+
 ## Interface
 
 LocalOps currently uses an interactive terminal loop. It builds the model,
@@ -85,12 +96,20 @@ questions, and keeps running after expected operational errors. Tool events are
 written to a rotating local file under `.localops/`; conversational content
 remains in the terminal and is not logged.
 
+The final-answer guard raises `InvalidFinalResponse` for empty text or unexpected
+structured tool calls. The CLI handles that specific exception, displays a safe
+error, and accepts another question without automatically repeating completed
+commands. This is structural validation, not a guarantee that every non-empty
+answer is complete or correct.
+
 Before displaying the first input prompt, the CLI asks the agent to warm the
 model with the real system prompt and action schemas. Ollama evaluates that
 stable prefix while the loading state is visible, generates at most one ignored
 token, and never invokes the selected action. Chat requests keep the model
 resident for the session; CLI shutdown sends a best-effort unload request.
 Warm-up failures stop before user input rather than creating a broken session.
+Loading timeouts follow the same stop-before-input policy; answer timeouts return
+to the prompt, and unload timeouts are suppressed during best-effort shutdown.
 
 ## Current non-goals
 

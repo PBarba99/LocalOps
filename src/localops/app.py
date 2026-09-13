@@ -5,10 +5,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import logging
+import httpx
 import ollama
 import paramiko
 
-from .agent import ServerAssistant
+from .agent import InvalidFinalResponse, ServerAssistant
 from .config import Settings, load_settings
 from .ollama_client import OllamaClient
 from .ssh_client import SSHClient
@@ -78,6 +79,12 @@ def run_cli(
     output_fn("Loading local model...")
     try:
         assistant.warm_up()
+    except httpx.TimeoutException:
+        output_fn(
+            "Error: loading the local model timed out. Check Ollama or increase "
+            "OLLAMA_TIMEOUT_SECONDS."
+        )
+        return
     except (ollama.RequestError, ollama.ResponseError, OSError):
         output_fn(
             "Error: the local model could not be loaded. Check that Ollama "
@@ -113,6 +120,11 @@ def run_cli(
                     "Error: the local model could not produce a valid tool request "
                     "after one correction. Try rephrasing the question."
                 )
+            except InvalidFinalResponse:
+                output_fn(
+                    "Error: the local model returned an invalid final answer. "
+                    "Try asking again."
+                )
             except ToolCommandError as exc:
                 diagnostic = (exc.result.stderr or exc.result.stdout).strip()
                 detail = f" Details: {diagnostic}" if diagnostic else ""
@@ -126,6 +138,11 @@ def run_cli(
                 )
             except paramiko.BadHostKeyException:
                 output_fn("Error: the server SSH host key did not match known_hosts.")
+            except httpx.TimeoutException:
+                output_fn(
+                    "Error: the local Ollama request timed out. Try again or "
+                    "increase OLLAMA_TIMEOUT_SECONDS."
+                )
             except TimeoutError:
                 output_fn(
                     "Error: the connection or command timed out. Check the VPN and "
@@ -149,7 +166,13 @@ def run_cli(
     finally:
         try:
             assistant.model.unload()
-        except (ollama.RequestError, ollama.ResponseError, OSError, KeyboardInterrupt):
+        except (
+            httpx.TimeoutException,
+            ollama.RequestError,
+            ollama.ResponseError,
+            OSError,
+            KeyboardInterrupt,
+        ):
             pass
 
 

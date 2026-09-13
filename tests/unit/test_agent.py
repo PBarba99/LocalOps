@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from localops.agent import ServerAssistant, ToolExecution
+from localops.agent import InvalidFinalResponse, ServerAssistant, ToolExecution
 from localops.ollama_client import ModelMetrics, ModelResponse
 from localops.prompts import FINAL_ANSWER_PROMPT, SYSTEM_PROMPT
 from localops.request_policy import ControlActionID, lookup_control_response
@@ -334,6 +334,7 @@ def test_answer_returns_fixed_decline_without_ssh_or_second_model_call() -> None
             tool_calls=({"name": "get_memory_usage", "arguments": {}},),
         ),
         ModelResponse(content="   "),
+        ModelResponse(content=""),
     ],
 )
 def test_answer_rejects_missing_final_text(final_response: ModelResponse) -> None:
@@ -349,7 +350,7 @@ def test_answer_rejects_missing_final_text(final_response: ModelResponse) -> Non
     tools.invoke.return_value = "Hostname:\ntest-server"
     assistant = ServerAssistant(model=model, tools=tools)
 
-    with pytest.raises(ValueError, match="another tool|empty final answer"):
+    with pytest.raises(InvalidFinalResponse, match="another tool|empty final answer"):
         assistant.answer("What is the hostname?")
 
 

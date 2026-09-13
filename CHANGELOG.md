@@ -23,12 +23,23 @@ All notable changes to LocalOps are documented in this file.
 - Added `get_temperature_readings`, backed by a fixed kernel thermal-zone query,
   with exact Celsius conversion, preserved zone labels, and handling for absent,
   unavailable, or malformed readings. It does not change thermal settings.
+- Added `OLLAMA_TIMEOUT_SECONDS`, a positive, finite SDK network timeout that
+  defaults to 120 seconds for loading, chat, and unload requests.
 
 ### Changed
 
 - Tool selection now uses temperature `0` for more consistent routing.
 - Final-answer requests omit tool schemas and include a concrete synthesis
   instruction after all selected tool outputs.
+
+### Fixed
+
+- Empty final answers and unexpected final tool calls now produce a handled CLI
+  error instead of a traceback, without automatically repeating commands.
+- Continuous stdout or stderr can no longer bypass the SSH output-collection
+  deadline; expired channels and clients are closed.
+- Ollama network timeouts now stop failed startup cleanly, leave the question
+  loop usable after request failures, and do not crash best-effort shutdown.
 
 ## [0.2.0] - 2026-09-03
 

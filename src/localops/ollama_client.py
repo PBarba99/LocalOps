@@ -73,7 +73,10 @@ class OllamaClient:
     def _create_client(self) -> ollama.Client:
         """Create an SDK client for the validated Ollama endpoint."""
 
-        return ollama.Client(host=str(self.settings.ollama_base_url))
+        return ollama.Client(
+            host=str(self.settings.ollama_base_url),
+            timeout=self.settings.ollama_timeout_seconds,
+        )
 
     def chat(
         self,

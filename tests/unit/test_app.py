@@ -5,13 +5,15 @@ from unittest.mock import MagicMock, call
 
 import json
 import logging
+import httpx
 import ollama
 import paramiko
 import pytest
 
+from localops.agent import ServerAssistant
 from localops.app import CLI_BANNER, build_assistant, configure_logging, run_cli
 from localops.config import Settings
-from localops.ollama_client import OllamaClient
+from localops.ollama_client import ModelResponse, OllamaClient
 from localops.ssh_client import CommandResult, SSHClient
 from localops.tools.errors import ToolCommandError
 from localops.tools.registry import CommandID, InvalidToolRequest, ToolRegistry
@@ -130,15 +132,64 @@ def test_run_cli_stops_before_prompt_when_model_warm_up_fails() -> None:
     ]
 
 
-def test_run_cli_ignores_unload_failure_during_clean_exit() -> None:
+@pytest.mark.parametrize(
+    "failure", [ConnectionError("Ollama stopped"), httpx.ReadTimeout("timed out")]
+)
+def test_run_cli_ignores_unload_failure_during_clean_exit(failure: Exception) -> None:
     assistant = MagicMock()
-    assistant.model.unload.side_effect = ConnectionError("Ollama stopped")
+    assistant.model.unload.side_effect = failure
     output = MagicMock()
 
     run_cli(assistant, input_fn=lambda _: "quit", output_fn=output)
 
     assistant.model.unload.assert_called_once_with()
     assert output.call_args_list[-1] == call("Goodbye.")
+
+
+def test_run_cli_stops_before_input_when_model_loading_times_out() -> None:
+    assistant = MagicMock()
+    assistant.warm_up.side_effect = httpx.ReadTimeout("private endpoint details")
+    input_fn = MagicMock()
+    output = MagicMock()
+
+    run_cli(assistant, input_fn=input_fn, output_fn=output)
+
+    input_fn.assert_not_called()
+    assistant.answer.assert_not_called()
+    messages = [invocation.args[0] for invocation in output.call_args_list]
+    assert messages[-1] == (
+        "Error: loading the local model timed out. Check Ollama or increase "
+        "OLLAMA_TIMEOUT_SECONDS."
+    )
+    assert not any("private endpoint details" in message for message in messages)
+
+
+@pytest.mark.parametrize(
+    "timeout_type",
+    [httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout],
+)
+def test_run_cli_recovers_after_ollama_timeout(
+    timeout_type: type[httpx.TimeoutException],
+) -> None:
+    assistant = MagicMock()
+    assistant.answer.side_effect = [
+        timeout_type("private endpoint details"), "The hostname is test-server."
+    ]
+    inputs = iter(["Inspect the server", "Try again", "quit"])
+    output = MagicMock()
+
+    run_cli(assistant, input_fn=lambda _: next(inputs), output_fn=output)
+
+    messages = [invocation.args[0] for invocation in output.call_args_list]
+    assert (
+        "Error: the local Ollama request timed out. Try again or increase "
+        "OLLAMA_TIMEOUT_SECONDS."
+    ) in messages
+    assert "LocalOps: The hostname is test-server." in messages
+    assert messages[-1] == "Goodbye."
+    assert not any("private endpoint details" in message for message in messages)
+    assert assistant.answer.call_count == 2
+    assistant.model.unload.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
@@ -186,6 +237,50 @@ def test_run_cli_reports_expected_error_and_keeps_running(
     messages = [output_call.args[0] for output_call in output.call_args_list]
     assert any(expected_message in message for message in messages)
     assert messages[-1] == "Goodbye."
+
+
+@pytest.mark.parametrize(
+    "invalid_response",
+    [
+        ModelResponse(content=""),
+        ModelResponse(content=" \n"),
+        ModelResponse(
+            content="Another tool is needed.",
+            tool_calls=({"name": "get_memory_usage", "arguments": {}},),
+        ),
+    ],
+)
+def test_run_cli_recovers_after_invalid_final_response(
+    invalid_response: ModelResponse,
+) -> None:
+    model = MagicMock()
+    tools = MagicMock()
+    selection = ModelResponse(
+        content="",
+        tool_calls=({"name": "get_system_info", "arguments": {}},),
+    )
+    model.chat.side_effect = [
+        selection,
+        invalid_response,
+        selection,
+        ModelResponse(content="The hostname is test-server."),
+    ]
+    tools.invoke.return_value = "Hostname:\ntest-server"
+    assistant = ServerAssistant(model=model, tools=tools)
+    inputs = iter(["What is the hostname?", "What is the hostname?", "quit"])
+    output = MagicMock()
+
+    run_cli(assistant, input_fn=lambda _: next(inputs), output_fn=output)
+
+    messages = [output_call.args[0] for output_call in output.call_args_list]
+    assert messages.count(
+        "Error: the local model returned an invalid final answer. Try asking again."
+    ) == 1
+    assert "LocalOps: The hostname is test-server." in messages
+    assert messages[-1] == "Goodbye."
+    assert model.chat.call_count == 4
+    assert tools.invoke.call_count == 2
+    model.unload.assert_called_once_with()
 
 
 @pytest.mark.parametrize("terminal_signal", [EOFError(), KeyboardInterrupt()])

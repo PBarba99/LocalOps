@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import ollama
+import httpx
 import pytest
 
 from localops.config import Settings
@@ -31,13 +32,16 @@ def test_sdk_client_uses_configured_ollama_endpoint() -> None:
         server_username="localops",
         server_ssh_key=Path("test_key"),
         ollama_base_url="http://ollama.internal:11434",
+        ollama_timeout_seconds=45,
         _env_file=None,
     )
 
     with patch("localops.ollama_client.ollama.Client") as client_class:
         sdk_client = OllamaClient(settings)._create_client()
 
-    client_class.assert_called_once_with(host="http://ollama.internal:11434/")
+    client_class.assert_called_once_with(
+        host="http://ollama.internal:11434/", timeout=45.0
+    )
     assert sdk_client is client_class.return_value
 
 
@@ -220,3 +224,37 @@ def test_chat_normalizes_ollama_performance_metrics() -> None:
         prompt_tokens=120,
         output_tokens=24,
     )
+
+
+@pytest.mark.parametrize("operation", ["warm_up", "chat", "unload"])
+@pytest.mark.parametrize(
+    "timeout_type",
+    [httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout],
+)
+def test_ollama_operations_propagate_network_timeouts_without_retry(
+    operation: str, timeout_type: type[httpx.TimeoutException]
+) -> None:
+    settings = Settings(
+        server_host="test-server",
+        server_username="localops",
+        server_ssh_key=Path("test_key"),
+        _env_file=None,
+    )
+    sdk_client = MagicMock()
+    failure = timeout_type("timed out")
+    sdk_client.chat.side_effect = failure
+    sdk_client.generate.side_effect = failure
+    messages = [{"role": "user", "content": "Inspect the server"}]
+    client = OllamaClient(settings)
+
+    with patch.object(OllamaClient, "_create_client", return_value=sdk_client):
+        with pytest.raises(timeout_type) as raised:
+            if operation == "warm_up":
+                client.warm_up(messages, [])
+            elif operation == "chat":
+                client.chat(messages)
+            else:
+                client.unload()
+
+    assert raised.value is failure
+    assert sdk_client.chat.call_count + sdk_client.generate.call_count == 1

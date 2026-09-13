@@ -101,23 +101,28 @@ class SSHClient:
         stdout = bytearray()
         stderr = bytearray()
 
+        def check_deadline() -> None:
+            if monotonic() >= deadline:
+                channel.close()
+                raise TimeoutError(
+                    f"Approved command exceeded {self.command_timeout:g} seconds"
+                )
+
         while True:
+            check_deadline()
             while channel.recv_ready():
+                check_deadline()
                 stdout.extend(channel.recv(65536))
             while channel.recv_stderr_ready():
+                check_deadline()
                 stderr.extend(channel.recv_stderr(65536))
 
+            check_deadline()
             if channel.exit_status_ready():
                 return CommandResult(
                     stdout.decode("utf-8", errors="replace"),
                     stderr.decode("utf-8", errors="replace"),
                     channel.recv_exit_status(),
-                )
-
-            if monotonic() >= deadline:
-                channel.close()
-                raise TimeoutError(
-                    f"Approved command exceeded {self.command_timeout:g} seconds"
                 )
 
             sleep(0.01)

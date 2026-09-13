@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     server_ssh_key: Path
     ollama_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434")
     ollama_model: str = Field(default="qwen3:4b", min_length=1)
+    ollama_timeout_seconds: float = Field(
+        default=120.0, gt=0, allow_inf_nan=False
+    )
     log_level: str = "INFO"
 
     @field_validator("server_host", "server_username", "ollama_model")

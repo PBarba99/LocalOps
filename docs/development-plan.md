@@ -51,3 +51,9 @@ questions, along with repeated attempts to request prohibited write operations.
   handling.
 - [x] Verify thermal-zone selection, unavailable readings, and combined
   temperature/CPU-load questions in the live CLI.
+- [x] Handle malformed final model responses without crashing the CLI, with
+  tests for recovery on the next question and no automatic command retry.
+- [x] Enforce the SSH output-collection deadline during continuous stdout and
+  stderr, with deterministic simulated-clock tests.
+- [x] Add configurable, validated Ollama network timeouts and test loading,
+  request recovery, and best-effort unload failures.
