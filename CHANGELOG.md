@@ -4,6 +4,8 @@ All notable changes to LocalOps are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-13
+
 ### Added
 
 - Added `get_cpu_load`, backed by fixed `nproc` and `/proc/loadavg` commands, to
@@ -76,6 +78,7 @@ All notable changes to LocalOps are documented in this file.
   answers, structured metrics, and an interactive CLI.
 - Added unit and integration tests for the initial application boundaries.
 
-[Unreleased]: https://github.com/PBarba99/LocalOps/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/PBarba99/LocalOps/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/PBarba99/LocalOps/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PBarba99/LocalOps/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PBarba99/LocalOps/releases/tag/v0.1.0
